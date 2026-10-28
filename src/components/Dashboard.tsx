@@ -65,13 +65,11 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
 
-  // FRESH USER EXPERIENCE & PRIVACY:
   const [chats, setChats] = useState<Chat[]>(() => {
     return [];
   });
 
   const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>({});
-
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -215,14 +213,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       ? newChatCustomId.trim()
       : `@${newChatCustomId.trim()}`;
 
-    // FIX: Combine initial hardcoded users and localStorage saved users so dynamically created accounts are found!
     let allStoredUsers: User[] = [...INITIAL_USERS];
     try {
       const savedLocalUsers = localStorage.getItem('chatnova_registered_users');
       if (savedLocalUsers) {
         const parsed = JSON.parse(savedLocalUsers);
         if (Array.isArray(parsed)) {
-          // Merge avoiding duplicates by customId or id
           const existingIds = new Set(allStoredUsers.map((u) => u.id));
           parsed.forEach((u: User) => {
             if (!existingIds.has(u.id)) {
@@ -298,27 +294,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  const handlePostStatus = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newStatusText.trim()) return;
-
-    const newStory: StatusStory = {
-      id: 'story_' + Date.now(),
-      userId: currentUser.id,
-      userName: currentUser.displayName,
-      customId: currentUser.customId,
-      userAvatar: avatarPreview,
-      text: newStatusText.trim(),
-      timestamp: 'Just now',
-      isViewed: false,
-      viewsCount: 0,
-    };
-
-    setStatuses([newStory, ...statuses]);
-    setNewStatusText('');
-    setShowNewStatusModal(false);
-  };
-
   const filteredChats = chats.filter((c) => {
     const title = c.isGroup ? c.groupName : c.participant.displayName;
     const subtitle = c.isGroup ? c.groupMembers?.map((m) => m.displayName).join(' ') : c.participant.customId;
@@ -347,7 +322,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* LEFT PANE / MAIN DASHBOARD (Chats list / tabs) */}
+      {/* LEFT PANE / MAIN DASHBOARD */}
       <div
         className={`w-full md:w-[380px] lg:w-[420px] h-full flex flex-col border-r shrink-0 transition-colors duration-200 ${
           isDark
@@ -355,7 +330,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             : 'bg-[#ffffff] border-slate-200 shadow-sm'
         } ${activeChatId ? 'hidden md:flex' : 'flex'}`}
       >
-        {/* TOP WHATSAPP-STYLE HEADER */}
+        {/* TOP HEADER */}
         <div
           className={`px-4 py-3 flex items-center justify-between border-b select-none transition-colors duration-200 ${
             isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -377,7 +352,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             }}
             title="ChatNova Enclave"
           >
-            {/* PROFILE PHOTO UPLOAD WIDGET IN HEADER */}
             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Change Profile Photo">
               <img
                 src={avatarPreview}
@@ -409,7 +383,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
           </div>
 
-          {/* Header Action Icons: Theme Toggle, Master Admin (Strict RBAC), Menu */}
           <div className="flex items-center gap-1.5 relative">
             <ThemeToggle />
 
@@ -417,7 +390,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <button
                 type="button"
                 onClick={onOpenMasterAdmin}
-                title="Master Admin Console (/master-admin)"
+                title="Master Admin Console"
                 className={`p-2 rounded-full transition cursor-pointer ${
                   isDark
                     ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60'
@@ -440,7 +413,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <MoreVertical className="w-5 h-5" />
             </button>
 
-            {/* Dropdown Menu */}
             {showHeaderMenu && (
               <div
                 className={`absolute right-0 top-11 z-40 w-52 rounded-2xl border shadow-2xl py-1 text-xs transition-colors duration-150 ${
@@ -544,7 +516,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         </div>
 
-        {/* TOP TABS BAR (Chats, Status, Calls, Settings) */}
+        {/* TABS BAR */}
         <div
           className={`grid grid-cols-4 text-xs font-semibold border-b select-none transition-colors duration-200 ${
             isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -770,7 +742,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 2: STATUS STORIES */}
+        {/* TAB 2: STATUS */}
         {activeTab === 'status' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             <div
@@ -849,7 +821,183 @@ export const Dashboard: React.FC<DashboardProps> = ({
             ))}
           </div>
         )}
+
+        {/* TAB 4: SETTINGS */}
+        {activeTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">
+              Encrypted Account & Privacy
+            </h3>
+            <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center gap-3">
+                <img src={avatarPreview} alt="" className="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-500" />
+                <div>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser.displayName}</h4>
+                  <p className="text-xs font-mono text-emerald-500">{currentUser.customId}</p>
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Role: {currentUser.role}</p>
+                </div>
+              </div>
+
+              <div className={`pt-3 border-t space-y-2.5 ${isDark ? 'border-slate-700/60' : 'border-slate-100'}`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>Zero-Log Protocol</span>
+                  <span className="font-mono text-emerald-500 font-bold">ACTIVE</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>End-to-End Encryption</span>
+                  <span className="font-mono text-emerald-500 font-bold">AES-256-GCM</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={onLogout}
+              className="w-full py-3 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-500 font-bold text-xs flex items-center justify-center gap-2 transition cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+              <span>Log Out Securely</span>
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* RIGHT CHAT AREA / CHAT ROOM OR EMPTY STATE */}
+      <div className={`flex-1 h-full flex flex-col ${activeChatId ? 'flex' : 'hidden md:flex'}`}>
+        {selectedChat ? (
+          <ChatRoom
+            currentUser={currentUser}
+            chat={selectedChat}
+            messages={messagesMap[selectedChat.id] || []}
+            onSendMessage={handleSendMessage}
+            onBack={() => setActiveChatId(null)}
+            onUpdateChat={handleUpdateChat}
+            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
+          />
+        ) : (
+          <div className={`flex-1 flex flex-col items-center justify-center p-8 text-center ${isDark ? 'bg-[#0b141a]' : 'bg-[#f0f2f5]'}`}>
+            <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-4 ring-1 ring-emerald-500/20">
+              <Shield className="w-10 h-10" />
+            </div>
+            <h2 className={`text-xl font-bold mb-2 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              ChatNova Secure Enclave
+            </h2>
+            <p className={`text-xs max-w-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              End-to-end encrypted messaging. Select an existing conversation or click the menu (&#8942;) at the top right to start a **New Custom ID Chat**.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* MODAL: NEW CUSTOM ID CHAT */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl transition-all ${
+            isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'
+          }`}>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2.5 rounded-2xl bg-emerald-500/10 text-emerald-500">
+                  <UserPlus className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base">New Custom ID Chat</h3>
+                  <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                    Enter recipient's @custom_id to connect securely
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewChatModal(false);
+                  setNewChatError('');
+                  setNewChatCustomId('');
+                }}
+                className={`p-2 rounded-full transition ${isDark ? 'hover:bg-slate-800 text-slate-400' : 'hover:bg-slate-100 text-slate-500'}`}
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleCreateNewChat} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold uppercase tracking-wider text-emerald-500 mb-1.5">
+                  Recipient Custom ID
+                </label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-slate-400 font-mono text-sm">@</span>
+                  <input
+                    type="text"
+                    value={newChatCustomId}
+                    onChange={(e) => {
+                      setNewChatCustomId(e.target.value);
+                      setNewChatError('');
+                    }}
+                    placeholder="e.g. ritesh_84"
+                    className={`w-full rounded-2xl pl-8 pr-4 py-2.5 text-sm font-mono border focus:outline-none focus:ring-2 focus:ring-emerald-500 transition ${
+                      isDark ? 'bg-[#202c33] border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-200 text-slate-900'
+                    }`}
+                    autoFocus
+                  />
+                </div>
+                {newChatError && (
+                  <p className="mt-2 text-xs text-rose-500 font-mono flex items-center gap-1">
+                    <ShieldAlert className="w-3.5 h-3.5 shrink-0" />
+                    <span>{newChatError}</span>
+                  </p>
+                )}
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewChatModal(false);
+                    setNewChatError('');
+                    setNewChatCustomId('');
+                  }}
+                  className={`px-4 py-2.5 rounded-2xl text-xs font-semibold transition ${
+                    isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
+                  }`}
+                >
+                  Cancel kar do
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition cursor-pointer"
+                >
+                  Start Secure Chat
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: CREATE GROUP */}
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          currentUser={currentUser}
+          onClose={() => setShowCreateGroupModal(false)}
+          onCreateGroup={handleCreateGroup}
+        />
+      )}
+
+      {/* MODAL: LINKED DEVICES */}
+      {showLinkedDevicesModal && (
+        <LinkedDevicesModal onClose={() => setShowLinkedDevicesModal(false)} />
+      )}
+
+      {/* ACTIVE CALL MODAL */}
+      {activeCall && (
+        <CallModal
+          currentUser={currentUser}
+          participant={activeCall.participant}
+          type={activeCall.type}
+          onEndCall={() => setActiveCall(null)}
+        />
+      )}
     </div>
   );
 };
