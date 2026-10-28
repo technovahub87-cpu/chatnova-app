@@ -1,0 +1,10 @@
+{
+  "name": "ChatNova - Encrypted Private Messaging",
+  "description": "ChatNova: Your Privacy • Our Priority. Production-ready private messaging app featuring custom IDs, end-to-end encryption, voice notes, media sharing, and secure Master Admin console.",
+  "requestFramePermissions": [
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
