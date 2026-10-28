@@ -65,45 +65,33 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
 
-  const [chats, setChats] = useState<Chat[]>(() => {
-    return [];
-  });
-
+  const [chats, setChats] = useState<Chat[]>([]);
   const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>({});
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Profile Photo Upload Ref & State
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>(currentUser.avatar);
 
-  // Calls state
   const [calls, setCalls] = useState<CallLog[]>(INITIAL_CALLS);
   const [activeCall, setActiveCall] = useState<{
     participant: User;
     type: 'voice' | 'video';
   } | null>(null);
 
-  // Status stories state
   const [statuses, setStatuses] = useState<StatusStory[]>(INITIAL_STATUSES);
-  const [selectedStory, setSelectedStory] = useState<StatusStory | null>(null);
   const [newStatusText, setNewStatusText] = useState('');
   const [showNewStatusModal, setShowNewStatusModal] = useState(false);
 
-  // New Chat & New Group modals
   const [showNewChatModal, setShowNewChatModal] = useState(false);
   const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
   const [newChatCustomId, setNewChatCustomId] = useState('');
   const [newChatError, setNewChatError] = useState('');
 
-  // Top header menu dropdown
   const [showHeaderMenu, setShowHeaderMenu] = useState(false);
   const [showLinkedDevicesModal, setShowLinkedDevicesModal] = useState(false);
-
-  // Global broadcast toast from WebSocket
   const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
 
-  // Handle Profile Photo Local Upload
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -120,7 +108,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Setup WebSocket listeners
   useEffect(() => {
     const unsubMsg = wsService.on('chat:new_message', (newMsg: Message) => {
       setMessagesMap((prev) => {
@@ -314,7 +301,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#f0f2f5] text-slate-900'
       }`}
     >
-      {/* Global Broadcast Notification Toast */}
       {broadcastNotice && (
         <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-amber-500 text-slate-950 font-semibold text-xs shadow-2xl flex items-center gap-2 animate-bounce">
           <ShieldAlert className="w-4 h-4 shrink-0" />
@@ -322,15 +308,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* LEFT PANE / MAIN DASHBOARD */}
+      {/* LEFT PANE */}
       <div
         className={`w-full md:w-[380px] lg:w-[420px] h-full flex flex-col border-r shrink-0 transition-colors duration-200 ${
-          isDark
-            ? 'bg-[#111b21] border-slate-800'
-            : 'bg-[#ffffff] border-slate-200 shadow-sm'
+          isDark ? 'bg-[#111b21] border-slate-800' : 'bg-[#ffffff] border-slate-200 shadow-sm'
         } ${activeChatId ? 'hidden md:flex' : 'flex'}`}
       >
-        {/* TOP HEADER */}
         <div
           className={`px-4 py-3 flex items-center justify-between border-b select-none transition-colors duration-200 ${
             isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -370,11 +353,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               />
             </div>
             <div>
-              <h1
-                className={`text-lg font-bold leading-tight flex items-center gap-1.5 ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}
-              >
+              <h1 className={`text-lg font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
                 Chat<span className="text-emerald-500 font-extrabold">Nova</span>
               </h1>
               <p className="text-[9px] font-mono tracking-widest text-emerald-600 dark:text-emerald-400 font-bold uppercase">
@@ -392,9 +371,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 onClick={onOpenMasterAdmin}
                 title="Master Admin Console"
                 className={`p-2 rounded-full transition cursor-pointer ${
-                  isDark
-                    ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60'
-                    : 'text-emerald-700 hover:text-emerald-800 hover:bg-slate-200/80'
+                  isDark ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60' : 'text-emerald-700 hover:text-emerald-800 hover:bg-slate-200/80'
                 }`}
               >
                 <ShieldAlert className="w-5 h-5" />
@@ -405,9 +382,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               type="button"
               onClick={() => setShowHeaderMenu(!showHeaderMenu)}
               className={`p-2 rounded-full transition cursor-pointer ${
-                isDark
-                  ? 'text-slate-300 hover:text-white hover:bg-slate-700/60'
-                  : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/80'
+                isDark ? 'text-slate-300 hover:text-white hover:bg-slate-700/60' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/80'
               }`}
             >
               <MoreVertical className="w-5 h-5" />
@@ -416,9 +391,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {showHeaderMenu && (
               <div
                 className={`absolute right-0 top-11 z-40 w-52 rounded-2xl border shadow-2xl py-1 text-xs transition-colors duration-150 ${
-                  isDark
-                    ? 'bg-[#233138] border-slate-700 text-slate-100'
-                    : 'bg-white border-slate-200 text-slate-800 shadow-xl'
+                  isDark ? 'bg-[#233138] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800 shadow-xl'
                 }`}
               >
                 <button
@@ -471,9 +444,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       setShowHeaderMenu(false);
                     }}
                     className={`w-full px-4 py-2.5 text-left font-mono font-bold flex items-center gap-2.5 transition cursor-pointer ${
-                      isDark
-                        ? 'text-amber-400 hover:bg-slate-700/60'
-                        : 'text-amber-600 hover:bg-slate-100'
+                      isDark ? 'text-amber-400 hover:bg-slate-700/60' : 'text-amber-600 hover:bg-slate-100'
                     }`}
                   >
                     <ShieldAlert className="w-4 h-4" />
@@ -495,11 +466,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span>Privacy Settings</span>
                 </button>
 
-                <div
-                  className={`my-1 border-t ${
-                    isDark ? 'border-slate-700' : 'border-slate-200'
-                  }`}
-                />
+                <div className={`my-1 border-t ${isDark ? 'border-slate-700' : 'border-slate-200'}`} />
 
                 <button
                   type="button"
@@ -528,9 +495,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className={`py-3 flex flex-col items-center gap-1 border-b-2 transition cursor-pointer ${
               activeTab === 'chats'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : isDark
-                ? 'border-transparent text-slate-400 hover:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                : isDark ? 'border-transparent text-slate-400 hover:text-white' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <div className="relative">
@@ -548,9 +513,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className={`py-3 flex flex-col items-center gap-1 border-b-2 transition cursor-pointer ${
               activeTab === 'status'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : isDark
-                ? 'border-transparent text-slate-400 hover:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                : isDark ? 'border-transparent text-slate-400 hover:text-white' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <CircleDot className="w-4 h-4" />
@@ -563,9 +526,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className={`py-3 flex flex-col items-center gap-1 border-b-2 transition cursor-pointer ${
               activeTab === 'calls'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : isDark
-                ? 'border-transparent text-slate-400 hover:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                : isDark ? 'border-transparent text-slate-400 hover:text-white' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <Phone className="w-4 h-4" />
@@ -578,9 +539,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             className={`py-3 flex flex-col items-center gap-1 border-b-2 transition cursor-pointer ${
               activeTab === 'settings'
                 ? 'border-emerald-500 text-emerald-600 dark:text-emerald-400 font-bold'
-                : isDark
-                ? 'border-transparent text-slate-400 hover:text-white'
-                : 'border-transparent text-slate-500 hover:text-slate-900'
+                : isDark ? 'border-transparent text-slate-400 hover:text-white' : 'border-transparent text-slate-500 hover:text-slate-900'
             }`}
           >
             <Settings className="w-4 h-4" />
@@ -590,11 +549,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
         {/* SEARCH BAR */}
         {(activeTab === 'chats' || activeTab === 'calls') && (
-          <div
-            className={`p-3 border-b transition-colors duration-200 ${
-              isDark ? 'bg-[#111b21] border-slate-800' : 'bg-white border-slate-200'
-            }`}
-          >
+          <div className={`p-3 border-b transition-colors duration-200 ${isDark ? 'bg-[#111b21] border-slate-800' : 'bg-white border-slate-200'}`}>
             <div className="relative">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-2.5 pointer-events-none" />
               <input
@@ -603,22 +558,16 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search encrypted chats, groups, or @custom_id..."
                 className={`w-full rounded-xl pl-9 pr-4 py-2 text-xs transition focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${
-                  isDark
-                    ? 'bg-[#202c33] border border-slate-700/60 text-white placeholder-slate-400'
-                    : 'bg-[#f0f2f5] border border-slate-200 text-slate-900 placeholder-slate-500 focus:bg-white'
+                  isDark ? 'bg-[#202c33] border border-slate-700/60 text-white placeholder-slate-400' : 'bg-[#f0f2f5] border border-slate-200 text-slate-900 placeholder-slate-500 focus:bg-white'
                 }`}
               />
             </div>
           </div>
         )}
 
-        {/* TAB 1: CHATS LIST */}
+        {/* TAB 1: CHATS */}
         {activeTab === 'chats' && (
-          <div
-            className={`flex-1 overflow-y-auto divide-y transition-colors duration-200 ${
-              isDark ? 'divide-slate-800/60' : 'divide-slate-100'
-            }`}
-          >
+          <div className={`flex-1 overflow-y-auto divide-y transition-colors duration-200 ${isDark ? 'divide-slate-800/60' : 'divide-slate-100'}`}>
             {filteredChats.map((chat) => {
               const isActive = chat.id === activeChatId;
               const lastMsg = chat.lastMessage;
@@ -634,22 +583,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     );
                   }}
                   className={`flex items-center gap-3 px-4 py-3 cursor-pointer transition select-none ${
-                    isActive
-                      ? isDark
-                        ? 'bg-[#2a3942]'
-                        : 'bg-[#f0f2f5]'
-                      : isDark
-                      ? 'hover:bg-[#202c33]/60'
-                      : 'hover:bg-slate-50'
+                    isActive ? (isDark ? 'bg-[#2a3942]' : 'bg-[#f0f2f5]') : (isDark ? 'hover:bg-[#202c33]/60' : 'hover:bg-slate-50')
                   }`}
                 >
                   <div className="relative shrink-0">
                     <img
                       src={chat.groupIcon || chat.participant.avatar}
                       alt={chat.groupName || chat.participant.displayName}
-                      className={`w-12 h-12 rounded-full object-cover ring-1 ${
-                        isDark ? 'ring-slate-700' : 'ring-slate-200'
-                      }`}
+                      className={`w-12 h-12 rounded-full object-cover ring-1 ${isDark ? 'ring-slate-700' : 'ring-slate-200'}`}
                     />
                     {chat.isGroup ? (
                       <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white dark:border-[#111b21] flex items-center justify-center text-white">
@@ -663,11 +604,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5 truncate">
-                        <span
-                          className={`font-semibold text-sm truncate ${
-                            isDark ? 'text-white' : 'text-slate-900'
-                          }`}
-                        >
+                        <span className={`font-semibold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
                           {chat.isGroup ? chat.groupName : chat.participant.displayName}
                         </span>
                         {chat.isGroup ? (
@@ -680,20 +617,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           </span>
                         )}
                       </div>
-                      <span
-                        className={`text-[10px] font-mono shrink-0 ml-2 ${
-                          isDark ? 'text-slate-400' : 'text-slate-500'
-                        }`}
-                      >
+                      <span className={`text-[10px] font-mono shrink-0 ml-2 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
                         {lastMsg?.timestamp || 'Online'}
                       </span>
                     </div>
 
-                    <div
-                      className={`flex items-center justify-between text-xs ${
-                        isDark ? 'text-slate-400' : 'text-slate-600'
-                      }`}
-                    >
+                    <div className={`flex items-center justify-between text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
                       <div className="flex items-center gap-1 truncate text-[12px]">
                         {isSentByMe && lastMsg && (
                           <span className="inline-flex shrink-0">
@@ -731,11 +660,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             })}
 
             {filteredChats.length === 0 && (
-              <div
-                className={`p-8 text-center text-xs ${
-                  isDark ? 'text-slate-500' : 'text-slate-400'
-                }`}
-              >
+              <div className={`p-8 text-center text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
                 No encrypted conversations yet. Click the menu (...) to start a new Custom ID chat or create a group!
               </div>
             )}
@@ -745,18 +670,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* TAB 2: STATUS */}
         {activeTab === 'status' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div
-              className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${
-                isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-              }`}
-            >
+            <div className={`flex items-center justify-between p-3 rounded-2xl border transition-colors ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
               <div className="flex items-center gap-3">
                 <div className="relative">
-                  <img
-                    src={avatarPreview}
-                    alt=""
-                    className="w-12 h-12 rounded-full object-cover"
-                  />
+                  <img src={avatarPreview} alt="" className="w-12 h-12 rounded-full object-cover" />
                   <button
                     type="button"
                     onClick={() => setShowNewStatusModal(true)}
@@ -766,12 +683,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   </button>
                 </div>
                 <div>
-                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                    My Status
-                  </h4>
-                  <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                    Tap to share an encrypted story
-                  </p>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>My Status</h4>
+                  <p className={`text-[11px] ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Tap to share an encrypted story</p>
                 </div>
               </div>
 
@@ -789,22 +702,13 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* TAB 3: CALLS */}
         {activeTab === 'calls' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-2">
-            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">
-              Recent Encrypted Calls
-            </h3>
+            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">Recent Encrypted Calls</h3>
             {calls.map((call) => (
-              <div
-                key={call.id}
-                className={`p-3 rounded-2xl border flex items-center justify-between ${
-                  isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-                }`}
-              >
+              <div key={call.id} className={`p-3 rounded-2xl border flex items-center justify-between ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
                 <div className="flex items-center gap-3">
                   <img src={call.participantAvatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                   <div>
-                    <h4 className={`font-semibold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {call.participantName}
-                    </h4>
+                    <h4 className={`font-semibold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>{call.participantName}</h4>
                     <p className="text-[10px] text-slate-400 font-mono">{call.timestamp}</p>
                   </div>
                 </div>
@@ -825,9 +729,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         {/* TAB 4: SETTINGS */}
         {activeTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">
-              Encrypted Account & Privacy
-            </h3>
+            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">Encrypted Account & Privacy</h3>
             <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
               <div className="flex items-center gap-3">
                 <img src={avatarPreview} alt="" className="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-500" />
@@ -862,8 +764,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
         )}
       </div>
 
-      {/* RIGHT CHAT AREA / CHAT ROOM OR EMPTY STATE */}
-      <div className={`flex-1 h-full flex flex-col ${activeChatId ? 'flex' : 'hidden md:flex'}`}>
+      {/* RIGHT PANE: CHAT ROOM OR SETTINGS / WELCOME PANEL */}
+      <div className={`flex-1 h-full flex flex-col ${activeChatId ? 'flex' : 'flex'}`}>
         {selectedChat ? (
           <ChatRoom
             currentUser={currentUser}
@@ -874,6 +776,40 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onUpdateChat={handleUpdateChat}
             onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
           />
+        ) : activeTab === 'settings' ? (
+          <div className={`flex-1 flex flex-col p-8 overflow-y-auto ${isDark ? 'bg-[#0b141a]' : 'bg-[#f0f2f5]'}`}>
+            <h2 className={`text-2xl font-bold mb-6 ${isDark ? 'text-white' : 'text-slate-900'}`}>Settings</h2>
+            <div className={`max-w-xl w-full p-6 rounded-3xl border space-y-6 ${isDark ? 'bg-[#111b21] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center gap-4">
+                <img src={avatarPreview} alt="" className="w-16 h-16 rounded-2xl object-cover ring-2 ring-emerald-500" />
+                <div>
+                  <h3 className={`font-bold text-base ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser.displayName}</h3>
+                  <p className="text-xs font-mono text-emerald-500">{currentUser.customId}</p>
+                </div>
+              </div>
+              <div className="space-y-4 pt-4 border-t border-slate-700/40">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-sm">Theme Mode</h4>
+                    <p className="text-xs text-slate-400">Switch between dark and light themes</p>
+                  </div>
+                  <ThemeToggle />
+                </div>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="font-semibold text-sm">Linked Devices</h4>
+                    <p className="text-xs text-slate-400">Manage companion sessions</p>
+                  </div>
+                  <button
+                    onClick={() => setShowLinkedDevicesModal(true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500/10 text-emerald-500 font-semibold text-xs hover:bg-emerald-500/20 transition cursor-pointer"
+                  >
+                    Manage
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         ) : (
           <div className={`flex-1 flex flex-col items-center justify-center p-8 text-center ${isDark ? 'bg-[#0b141a]' : 'bg-[#f0f2f5]'}`}>
             <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-4 ring-1 ring-emerald-500/20">
@@ -885,6 +821,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <p className={`text-xs max-w-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
               End-to-end encrypted messaging. Select an existing conversation or click the menu (&#8942;) at the top right to start a **New Custom ID Chat**.
             </p>
+            <button
+              type="button"
+              onClick={() => setShowNewChatModal(true)}
+              className="px-5 py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-lg shadow-emerald-600/20 transition cursor-pointer flex items-center gap-2"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Start New Custom ID Chat</span>
+            </button>
           </div>
         )}
       </div>
@@ -961,7 +905,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     isDark ? 'bg-slate-800 hover:bg-slate-700 text-slate-300' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                   }`}
                 >
-                  Cancel kar do
+                  Cancel
                 </button>
                 <button
                   type="submit"
