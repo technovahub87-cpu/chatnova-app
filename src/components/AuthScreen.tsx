@@ -40,6 +40,21 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
   const [timer, setTimer] = useState(60);
   const [isVerifying, setIsVerifying] = useState(false);
 
+  // Local storage registry for registered users to persist mock/enclave passwords securely across sessions
+  const [registeredUsersMap, setRegisteredUsersMap] = useState<Record<string, { user: UserType; pass: string }>>(() => {
+    try {
+      const saved = localStorage.getItem('chatnova_registered_users');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    
+    // Default initial users mapping
+    const initialMap: Record<string, { user: UserType; pass: string }> = {};
+    INITIAL_USERS.forEach((u) => {
+      initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' }; // default password for mock users
+    });
+    return initialMap;
+  });
+
   const otpInputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   // Timer countdown for OTP
@@ -51,14 +66,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     return () => clearInterval(interval);
   }, [step, timer]);
 
-  // Handle credentials submission
+  // Handle credentials submission with strict validation
   const handleCredentialsSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg('');
 
     const formattedId = customId.trim().startsWith('@')
-      ? customId.trim()
-      : `@${customId.trim()}`;
+      ? customId.trim().toLowerCase()
+      : `@${customId.trim().toLowerCase()}`;
 
     if (!formattedId || formattedId.length < 3) {
       setErrorMsg('Please enter a valid Custom Username/ID (min 3 chars).');
@@ -68,6 +83,30 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     if (!password || password.length < 6) {
       setErrorMsg('Password must be at least 6 characters long.');
       return;
+    }
+
+    // STRICT VALIDATION FOR SIGN IN & REGISTER
+    if (isRegisterMode) {
+      // Check if ID already exists in registered users or initial users
+      if (registeredUsersMap[formattedId] || INITIAL_USERS.some(u => u.customId.toLowerCase() === formattedId)) {
+        setErrorMsg(`Identity ${formattedId} is already taken. Please choose another ID or Sign In.`);
+        return;
+      }
+    } else {
+      // Sign In Mode: Check if ID exists
+      const targetUserRecord = registeredUsersMap[formattedId];
+      const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === formattedId);
+
+      if (!targetUserRecord && !foundInitial) {
+        setErrorMsg(`Identity ${formattedId} does not exist. Please Create Nova ID first.`);
+        return;
+      }
+
+      // Check password validation for registered users
+      if (targetUserRecord && targetUserRecord.pass !== password) {
+        setErrorMsg('Invalid password. Please enter the correct password.');
+        return;
+      }
     }
 
     const randomOtp = Math.floor(100000 + Math.random() * 900000).toString();
@@ -105,7 +144,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     setIsVerifying(true);
     setErrorMsg('');
 
-    const cleanId = customId.trim().startsWith('@') ? customId.trim() : `@${customId.trim()}`;
+    const cleanId = customId.trim().startsWith('@') ? customId.trim().toLowerCase() : `@${customId.trim().toLowerCase()}`;
 
     // 1. Try real live backend API first
     (async () => {
@@ -143,22 +182,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
         console.warn('[ChatNova Auth] Live backend request skipped, using enclave mode.');
       }
 
-      // 2. Offline / Enclave mode fallback
+      // 2. Offline / Enclave mode with strict persistence
       setTimeout(() => {
         setIsVerifying(false);
 
-        const existing = INITIAL_USERS.find(
-          (u) => u.customId.toLowerCase() === cleanId.toLowerCase()
-        );
-
-        if (existing) {
-          if (existing.isBanned) {
-            setErrorMsg('This identity has been suspended by Master Administration.');
-            setStep('credentials');
-            return;
-          }
-          onLoginSuccess(existing);
-        } else {
+        if (isRegisterMode) {
           const newUser: UserType = {
             id: 'user_' + Math.random().toString(36).substring(2, 9),
             customId: cleanId,
@@ -172,7 +200,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             twoFactorEnabled: true,
             createdAt: new Date().toISOString().split('T')[0],
           };
+
+          const updatedMap = { ...registeredUsersMap, [cleanId]: { user: newUser, pass: password } };
+          setRegisteredUsersMap(updatedMap);
+          try {
+            localStorage.setItem('chatnova_registered_users', JSON.stringify(updatedMap));
+          } catch (e) {}
+
           onLoginSuccess(newUser);
+        } else {
+          const existingRecord = registeredUsersMap[cleanId];
+          const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === cleanId);
+
+          const userToLog = existingRecord ? existingRecord.user : foundInitial;
+
+          if (userToLog) {
+            if ((userToLog as any).isBanned) {
+              setErrorMsg('This identity has been suspended by Master Administration.');
+              setStep('credentials');
+              return;
+            }
+            onLoginSuccess(userToLog);
+          } else {
+            setErrorMsg('Identity not found in secure enclave.');
+            setStep('credentials');
+          }
         }
       }, 700);
     })();
@@ -186,7 +238,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           : 'bg-gradient-to-br from-[#f8fafc] via-[#f1f5f9] to-[#e2e8f0] text-slate-800'
       }`}
     >
-      {/* Ambient background glows */}
       <div
         className={`absolute top-10 left-10 w-72 h-72 rounded-full blur-3xl pointer-events-none ${
           isDark ? 'bg-emerald-600/10' : 'bg-emerald-500/15'
@@ -198,7 +249,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
         }`}
       />
 
-      {/* Outer Card */}
       <div
         className={`relative w-full max-w-md backdrop-blur-xl border rounded-3xl p-6 sm:p-8 transition-colors duration-200 ${
           isDark
@@ -206,7 +256,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             : 'bg-white/95 border-slate-200/90 shadow-[0_12px_45px_rgba(0,0,0,0.08)]'
         }`}
       >
-        {/* Top Header Badge & Theme Toggle */}
         <div className="flex items-center justify-between mb-6">
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none"
@@ -242,9 +291,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Theme Toggle Pill */}
             <ThemeToggle variant="pill" />
-
             <div
               className={`hidden sm:flex px-2 py-0.5 rounded-full border text-[10px] font-mono items-center gap-1.5 ${
                 isDark
@@ -265,10 +312,8 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           </div>
         )}
 
-        {/* STEP 1: CREDENTIALS (NO PHONE NUMBER) */}
         {step === 'credentials' && (
           <div>
-            {/* Mode Tabs */}
             <div
               className={`grid grid-cols-2 gap-1 p-1 rounded-2xl mb-6 border ${
                 isDark ? 'bg-slate-900/90 border-slate-800' : 'bg-slate-100 border-slate-200'
@@ -309,7 +354,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             </div>
 
             <form onSubmit={handleCredentialsSubmit} className="space-y-4">
-              {/* Display name if registering */}
               {isRegisterMode && (
                 <div>
                   <label
@@ -336,7 +380,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
                 </div>
               )}
 
-              {/* Custom Username / ID Field */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label
@@ -375,7 +418,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
                 </p>
               </div>
 
-              {/* Password Field */}
               <div>
                 <label
                   className={`block text-xs font-medium mb-1.5 ${
@@ -407,7 +449,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
                 </div>
               </div>
 
-              {/* Submit Button */}
               <button
                 type="submit"
                 className="w-full mt-2 py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-emerald-950/20 flex items-center justify-center gap-2 transition transform active:scale-[0.99] cursor-pointer"
@@ -419,7 +460,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           </div>
         )}
 
-        {/* STEP 2: SECURE OTP / 2FA VERIFICATION FLOW */}
         {step === 'otp' && (
           <div className="text-center">
             <div className="w-14 h-14 mx-auto mb-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center">
@@ -444,7 +484,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               </span>
             </p>
 
-            {/* Simulated OTP Display Banner */}
             <div
               className={`mb-5 p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono ${
                 isDark
@@ -468,7 +507,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               </button>
             </div>
 
-            {/* 6 Digit Inputs */}
             <div className="flex justify-center gap-2 mb-5">
               {otpDigits.map((digit, idx) => (
                 <input
@@ -490,7 +528,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               ))}
             </div>
 
-            {/* Resend & Timer */}
             <div
               className={`flex items-center justify-between text-xs mb-5 px-1 font-mono ${
                 isDark ? 'text-slate-400' : 'text-slate-500'
@@ -516,7 +553,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               <span>{timer > 0 ? `Expires in 00:${timer < 10 ? `0${timer}` : timer}` : 'Expired'}</span>
             </div>
 
-            {/* Action Buttons */}
             <div className="space-y-2">
               <button
                 type="button"
@@ -553,7 +589,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           </div>
         )}
 
-        {/* Security & Cryptographic Integrity Badges */}
         <div
           className={`mt-6 pt-4 border-t flex items-center justify-between text-[11px] ${
             isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-500'
