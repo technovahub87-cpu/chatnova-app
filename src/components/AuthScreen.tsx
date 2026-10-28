@@ -47,10 +47,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
       if (saved) return JSON.parse(saved);
     } catch (e) {}
     
-    // Default initial users mapping
     const initialMap: Record<string, { user: UserType; pass: string }> = {};
     INITIAL_USERS.forEach((u) => {
-      initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' }; // default password for mock users
+      initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' };
     });
     return initialMap;
   });
@@ -85,15 +84,12 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
       return;
     }
 
-    // STRICT VALIDATION FOR SIGN IN & REGISTER
     if (isRegisterMode) {
-      // Check if ID already exists in registered users or initial users
       if (registeredUsersMap[formattedId] || INITIAL_USERS.some(u => u.customId.toLowerCase() === formattedId)) {
         setErrorMsg(`Identity ${formattedId} is already taken. Please choose another ID or Sign In.`);
         return;
       }
     } else {
-      // Sign In Mode: Check if ID exists
       const targetUserRecord = registeredUsersMap[formattedId];
       const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === formattedId);
 
@@ -102,7 +98,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
         return;
       }
 
-      // Check password validation for registered users
       if (targetUserRecord && targetUserRecord.pass !== password) {
         setErrorMsg('Invalid password. Please enter the correct password.');
         return;
@@ -117,7 +112,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
   };
 
   const handleOtpChange = (index: number, val: string) => {
-    if (!/^\d*$/.test(val)) return;
+    if (!/^\d*\$/.test(val)) return;
 
     const newDigits = [...otpDigits];
     newDigits[index] = val.slice(-1);
@@ -146,7 +141,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
 
     const cleanId = customId.trim().startsWith('@') ? customId.trim().toLowerCase() : `@${customId.trim().toLowerCase()}`;
 
-    // 1. Try real live backend API first
     (async () => {
       try {
         let apiRes;
@@ -182,7 +176,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
         console.warn('[ChatNova Auth] Live backend request skipped, using enclave mode.');
       }
 
-      // 2. Offline / Enclave mode with strict persistence
+      // Offline / Enclave mode with global sync fix for chat search
       setTimeout(() => {
         setIsVerifying(false);
 
@@ -203,16 +197,31 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
 
           const updatedMap = { ...registeredUsersMap, [cleanId]: { user: newUser, pass: password } };
           setRegisteredUsersMap(updatedMap);
+          
           try {
             localStorage.setItem('chatnova_registered_users', JSON.stringify(updatedMap));
+            
+            // FIX: Push newly registered user into global users array so other IDs / chat search can find them instantly without "Identity not found" error
+            const existingGlobalUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
+            if (!existingGlobalUsers.some((u: UserType) => u.customId.toLowerCase() === cleanId)) {
+              existingGlobalUsers.push(newUser);
+              localStorage.setItem('chatnova_all_users', JSON.stringify(existingGlobalUsers));
+            }
           } catch (e) {}
 
           onLoginSuccess(newUser);
         } else {
           const existingRecord = registeredUsersMap[cleanId];
           const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === cleanId);
+          
+          // Also check global localStorage user pool
+          let foundGlobal = null;
+          try {
+            const allSaved = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
+            foundGlobal = allSaved.find((u: UserType) => u.customId.toLowerCase() === cleanId);
+          } catch (e) {}
 
-          const userToLog = existingRecord ? existingRecord.user : foundInitial;
+          const userToLog = existingRecord ? existingRecord.user : (foundInitial || foundGlobal);
 
           if (userToLog) {
             if ((userToLog as any).isBanned) {
@@ -491,119 +500,4 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
                   : 'bg-emerald-50 border-emerald-200 text-slate-800'
               }`}
             >
-              <span className="text-[11px] text-slate-500">Enclave Token:</span>
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold tracking-widest text-sm bg-black/10 dark:bg-slate-900 px-2 py-0.5 rounded border border-emerald-500/40">
-                {generatedOtp}
-              </span>
-              <button
-                type="button"
-                onClick={() => {
-                  setOtpDigits(generatedOtp.split(''));
-                  handleVerifyOtp(generatedOtp);
-                }}
-                className="text-[10px] text-teal-600 dark:text-teal-300 underline font-semibold cursor-pointer"
-              >
-                Auto-fill & Verify
-              </button>
-            </div>
-
-            <div className="flex justify-center gap-2 mb-5">
-              {otpDigits.map((digit, idx) => (
-                <input
-                  key={idx}
-                  ref={(el) => {
-                    otpInputRefs.current[idx] = el;
-                  }}
-                  type="text"
-                  maxLength={1}
-                  value={digit}
-                  onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(idx, e)}
-                  className={`w-11 h-12 text-center text-lg font-mono font-bold rounded-xl border-2 outline-none transition shadow-inner ${
-                    isDark
-                      ? 'bg-[#0b141a] border-slate-700 focus:border-emerald-400 text-white'
-                      : 'bg-slate-50 border-slate-300 focus:border-emerald-500 text-slate-900 focus:bg-white'
-                  }`}
-                />
-              ))}
-            </div>
-
-            <div
-              className={`flex items-center justify-between text-xs mb-5 px-1 font-mono ${
-                isDark ? 'text-slate-400' : 'text-slate-500'
-              }`}
-            >
-              <button
-                type="button"
-                disabled={timer > 0}
-                onClick={() => {
-                  const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
-                  setGeneratedOtp(newOtp);
-                  setTimer(60);
-                }}
-                className={`flex items-center gap-1 cursor-pointer ${
-                  timer > 0
-                    ? 'opacity-40 cursor-not-allowed'
-                    : 'text-emerald-600 dark:text-emerald-400 hover:underline'
-                }`}
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-                Resend Token
-              </button>
-              <span>{timer > 0 ? `Expires in 00:${timer < 10 ? `0${timer}` : timer}` : 'Expired'}</span>
-            </div>
-
-            <div className="space-y-2">
-              <button
-                type="button"
-                disabled={isVerifying}
-                onClick={() => handleVerifyOtp()}
-                className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-sm tracking-wide shadow-lg shadow-emerald-950/20 flex items-center justify-center gap-2 transition cursor-pointer"
-              >
-                {isVerifying ? (
-                  <>
-                    <RefreshCw className="w-4 h-4 animate-spin" />
-                    <span>Verifying Cryptographic Proof...</span>
-                  </>
-                ) : (
-                  <>
-                    <Check className="w-4 h-4" />
-                    <span>Confirm & Decrypt Session</span>
-                  </>
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setStep('credentials');
-                  setErrorMsg('');
-                }}
-                className={`w-full py-2 text-xs transition cursor-pointer ${
-                  isDark ? 'text-slate-400 hover:text-white' : 'text-slate-500 hover:text-slate-800'
-                }`}
-              >
-                Back to credentials
-              </button>
-            </div>
-          </div>
-        )}
-
-        <div
-          className={`mt-6 pt-4 border-t flex items-center justify-between text-[11px] ${
-            isDark ? 'border-slate-800 text-slate-500' : 'border-slate-200 text-slate-500'
-          }`}
-        >
-          <span className="flex items-center gap-1 font-mono">
-            <Lock className="w-3 h-3 text-emerald-500" /> 256-Bit E2EE
-          </span>
-
-          <span className="flex items-center gap-1 font-mono text-[10px] text-emerald-600 dark:text-emerald-400">
-            <Shield className="w-3 h-3" />
-            Zero-Knowledge Enclave
-          </span>
-        </div>
-      </div>
-    </div>
-  );
-};
+              <span className="text-[11px] text-slate-500">Enclave Token
