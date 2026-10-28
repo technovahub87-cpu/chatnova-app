@@ -123,7 +123,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
         setCameraActive(true);
       }
     } catch (e) {
-      // Permission denied or no camera: use realistic simulated optical viewfinder
       setCameraActive(false);
     }
   };
@@ -142,7 +141,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
     setQrExpired(false);
   };
 
-  // Perform device pairing handshake
   const handleLinkNewDevice = (deviceMeta?: Partial<LinkedDevice>) => {
     setIsPairing(true);
 
@@ -173,7 +171,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
       setIsPairing(false);
       setPairingSuccessDevice(newDevice.name);
 
-      // Emit WebSocket event to sync multi-device sessions
       wsService.emit('device:linked', {
         userId: currentUser.id,
         customId: currentUser.customId,
@@ -190,13 +187,11 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
     }, 1200);
   };
 
-  // Log out a specific device
   const handleLogoutDevice = (deviceId: string) => {
     const target = devices.find((d) => d.id === deviceId);
     setDevices((prev) => prev.filter((d) => d.id !== deviceId));
     setSelectedDeviceToLogout(null);
 
-    // Notify backend WebSocket
     wsService.emit('device:unlinked', {
       userId: currentUser.id,
       deviceId,
@@ -207,7 +202,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
     setTimeout(() => setSyncNotice(null), 3500);
   };
 
-  // Log out from all devices
   const handleLogoutAllDevices = () => {
     setDevices([]);
     setShowLogoutAllConfirm(false);
@@ -305,12 +299,8 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 
         {/* BODY CONTENT */}
         <div className="flex-1 overflow-y-auto">
-          {/* ==================================================== */}
-          {/* 1. MAIN LIST VIEW                                    */}
-          {/* ==================================================== */}
           {activeView === 'list' && (
             <div className="p-5 sm:p-6 space-y-6">
-              {/* WHATSAPP-STYLE HERO ILLUSTRATION */}
               <div
                 className={`p-6 rounded-3xl border text-center transition-colors relative overflow-hidden ${
                   isDark
@@ -318,7 +308,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                     : 'bg-gradient-to-b from-emerald-50/70 to-slate-50 border-emerald-100 shadow-sm'
                 }`}
               >
-                {/* Decorative devices diagram */}
                 <div className="flex items-center justify-center gap-3 sm:gap-4 mb-4">
                   <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center text-emerald-500 shadow-inner">
                     <Smartphone className="w-6 h-6 sm:w-7 sm:h-7" />
@@ -340,7 +329,6 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                   Mirror and sync your encrypted chats to laptops, browsers, and tablets. Your private keys never leave your devices.
                 </p>
 
-                {/* Primary CTA: LINK A DEVICE BUTTON */}
                 <div className="flex flex-col sm:flex-row items-center justify-center gap-2.5">
                   <button
                     type="button"
@@ -369,461 +357,115 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                 </div>
               </div>
 
-              {/* SECURITY ENCLAVE PILL */}
-              <div
-                className={`p-3.5 rounded-2xl border flex items-center gap-3 text-xs ${
-                  isDark ? 'bg-[#14232f] border-emerald-500/20' : 'bg-emerald-50/60 border-emerald-200'
-                }`}
-              >
-                <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
-                <p className={`text-[11px] ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  Your personal messages are <strong>end-to-end encrypted</strong> on all devices using independent cryptographic ratchets.
-                </p>
-              </div>
-
-              {/* DEVICE STATUS LIST */}
               <div>
                 <div className="flex items-center justify-between mb-3 px-1">
                   <h4 className="text-[11px] uppercase tracking-wider font-mono font-bold text-emerald-600 dark:text-emerald-400">
                     Device Status ({devices.length} Active)
                   </h4>
-                  <span className={`text-[10px] font-mono ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
-                    Tap device to revoke session
-                  </span>
                 </div>
 
-                {devices.length === 0 ? (
-                  <div
-                    className={`p-8 rounded-2xl border border-dashed text-center ${
-                      isDark ? 'border-slate-800 bg-slate-900/30 text-slate-400' : 'border-slate-300 bg-slate-50 text-slate-500'
-                    }`}
-                  >
-                    <Laptop className="w-10 h-10 mx-auto mb-2 opacity-40 text-slate-400" />
-                    <p className="text-xs font-bold mb-1">No Devices Currently Linked</p>
-                    <p className="text-[11px] max-w-xs mx-auto">
-                      Link your laptop, desktop browser, or tablet to seamlessly reply to chats from anywhere.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-2.5">
-                    {devices.map((device) => (
-                      <div
-                        key={device.id}
-                        className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between group ${
-                          isDark
-                            ? 'bg-[#17242c] hover:bg-[#1d2d37] border-slate-800'
-                            : 'bg-white hover:bg-slate-50 border-slate-200 shadow-xs'
-                        }`}
-                      >
-                        <div className="flex items-center gap-3.5 min-w-0">
-                          <div
-                            className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${
-                              isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-100 border-slate-200'
-                            }`}
-                          >
-                            {getDeviceIcon(device.type)}
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h5 className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                                {device.name}
-                              </h5>
-                              {device.lastActive.toLowerCase().includes('active') && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[9px] font-mono font-bold bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-ping" />
-                                  Online
-                                </span>
-                              )}
-                            </div>
-
-                            <p className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                              {device.browser ? `${device.browser} • ` : ''}
-                              {device.location}
-                            </p>
-
-                            <div className="flex items-center gap-2 mt-1 text-[10px] font-mono text-slate-500 dark:text-slate-400">
-                              <span>Last active: {device.lastActive}</span>
-                              <span>•</span>
-                              <span className="truncate">{device.fingerprint}</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        <button
-                          type="button"
-                          onClick={() => setSelectedDeviceToLogout(device)}
-                          title={`Log out from ${device.name}`}
-                          className="px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 shrink-0 ml-2"
+                <div className="space-y-2.5">
+                  {devices.map((device) => (
+                    <div
+                      key={device.id}
+                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between group ${
+                        isDark
+                          ? 'bg-[#17242c] hover:bg-[#1d2d37] border-slate-800'
+                          : 'bg-white hover:bg-slate-50 border-slate-200 shadow-xs'
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div
+                          className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${
+                            isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-100 border-slate-200'
+                          }`}
                         >
-                          Log Out
-                        </button>
+                          {getDeviceIcon(device.type)}
+                        </div>
+                        <div className="min-w-0">
+                          <h5 className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                            {device.name}
+                          </h5>
+                          <p className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                            {device.browser ? `${device.browser} • ` : ''} {device.location}
+                          </p>
+                        </div>
                       </div>
-                    ))}
-                  </div>
-                )}
-              </div>
 
-              {/* LOGOUT ALL SESSIONS KILL SWITCH */}
-              {devices.length > 0 && (
-                <div className="pt-2 text-center">
-                  <button
-                    type="button"
-                    onClick={() => setShowLogoutAllConfirm(true)}
-                    className="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-mono font-bold text-rose-500 hover:bg-rose-500/10 transition cursor-pointer"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                    <span>Log Out from All Companion Devices</span>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => handleLogoutDevice(device.id)}
+                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 shrink-0 ml-2"
+                      >
+                        Log Out
+                      </button>
+                    </div>
+                  ))}
                 </div>
-              )}
+              </div>
             </div>
           )}
 
-          {/* ==================================================== */}
-          {/* 2. QR SCANNER VIEW (Mobile scanning laptop)          */}
-          {/* ==================================================== */}
           {activeView === 'scanner' && (
             <div className="p-5 sm:p-6 flex flex-col items-center">
-              <div className="w-full max-w-sm text-center mb-4">
-                <h3 className={`text-base font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  Scan QR Code to Link Device
-                </h3>
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  To use ChatNova Web, go to <span className="font-mono font-bold text-emerald-500">web.chatnova.network</span> on your computer and scan the QR code.
-                </p>
-              </div>
-
-              {/* SCANNER VIEWFINDER BOX */}
               <div className="relative w-64 h-64 sm:w-72 sm:h-72 rounded-3xl overflow-hidden border-2 border-emerald-500/50 bg-black shadow-2xl flex items-center justify-center">
-                {/* Real video if camera permitted */}
                 {cameraActive ? (
-                  <video
-                    ref={videoRef}
-                    playsInline
-                    muted
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
+                  <video ref={videoRef} playsInline muted className="absolute inset-0 w-full h-full object-cover" />
                 ) : (
-                  /* Optical Simulated HUD Background */
-                  <div className="absolute inset-0 bg-gradient-to-br from-slate-950 via-[#071318] to-slate-950 flex items-center justify-center">
-                    {/* Simulated mock QR pattern to scan */}
-                    <div className="p-4 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-xs flex flex-col items-center justify-center">
-                      <QrCode className="w-32 h-32 text-emerald-400/80 animate-pulse" />
-                      <span className="text-[10px] font-mono text-emerald-400 mt-2">Target Optical Code Detected</span>
-                    </div>
+                  <div className="absolute inset-0 bg-slate-950 flex items-center justify-center">
+                    <QrCode className="w-32 h-32 text-emerald-400/80 animate-pulse" />
                   </div>
                 )}
-
-                {/* Reticle Brackets (Top Left, Top Right, Bottom Left, Bottom Right) */}
-                <div className="absolute top-4 left-4 w-7 h-7 border-t-4 border-l-4 border-emerald-500 rounded-tl-lg pointer-events-none" />
-                <div className="absolute top-4 right-4 w-7 h-7 border-t-4 border-r-4 border-emerald-500 rounded-tr-lg pointer-events-none" />
-                <div className="absolute bottom-4 left-4 w-7 h-7 border-b-4 border-l-4 border-emerald-500 rounded-bl-lg pointer-events-none" />
-                <div className="absolute bottom-4 right-4 w-7 h-7 border-b-4 border-r-4 border-emerald-500 rounded-br-lg pointer-events-none" />
-
-                {/* Sweeping Laser Scanner Line */}
-                <div className="absolute left-4 right-4 h-0.5 bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_12px_#10b981] animate-bounce pointer-events-none" />
-
-                {/* Pairing in progress HUD */}
                 {isPairing && (
-                  <div className="absolute inset-0 bg-black/80 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20">
+                  <div className="absolute inset-0 bg-black/80 flex flex-col items-center justify-center text-white z-20">
                     <RefreshCw className="w-10 h-10 text-emerald-400 animate-spin mb-3" />
-                    <span className="text-xs font-mono font-bold tracking-wider">EXCHANGING E2EE KEYS...</span>
-                    <span className="text-[10px] text-slate-400 mt-1">Creating isolated ratchet tunnel</span>
+                    <span className="text-xs font-mono font-bold">LINKING DEVICE...</span>
                   </div>
                 )}
-
-                {/* Pairing Success HUD */}
-                {pairingSuccessDevice && (
-                  <div className="absolute inset-0 bg-emerald-950/90 backdrop-blur-xs flex flex-col items-center justify-center text-white z-20 animate-in zoom-in-95">
-                    <CheckCircle2 className="w-12 h-12 text-emerald-400 mb-2" />
-                    <span className="text-sm font-bold">DEVICE LINKED!</span>
-                    <span className="text-xs text-emerald-300 font-mono mt-1">{pairingSuccessDevice}</span>
-                  </div>
-                )}
-
-                {/* Flashlight toggle */}
-                <button
-                  type="button"
-                  onClick={() => setScannerFlashlight(!scannerFlashlight)}
-                  className={`absolute bottom-3 right-3 p-2.5 rounded-full transition z-10 cursor-pointer ${
-                    scannerFlashlight ? 'bg-amber-400 text-slate-950' : 'bg-black/60 text-white hover:bg-black/80'
-                  }`}
-                  title="Toggle Flashlight"
-                >
-                  <Zap className="w-4 h-4" />
-                </button>
               </div>
 
-              {/* Instructions and Quick-Pair simulator for developer / user */}
-              <div className="mt-5 text-center max-w-sm space-y-3">
-                <div className="flex items-center justify-center gap-4 text-xs font-mono text-slate-400">
-                  <span className="flex items-center gap-1.5">
-                    <Camera className="w-4 h-4 text-emerald-500" />
-                    <span>Auto-Detect Active</span>
-                  </span>
-                  <span>•</span>
-                  <span className="flex items-center gap-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-500" />
-                    <span>Zero-Knowledge QR</span>
-                  </span>
-                </div>
-
-                {/* Interactive Instant Simulate Scan button */}
+              <div className="mt-5 text-center max-w-sm space-y-3 w-full">
                 <button
                   type="button"
-                  disabled={isPairing || !!pairingSuccessDevice}
+                  disabled={isPairing}
                   onClick={() => handleLinkNewDevice()}
-                  className="w-full py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 disabled:opacity-50 text-slate-950 font-bold text-xs tracking-wider uppercase shadow-lg flex items-center justify-center gap-2 transition cursor-pointer"
+                  className="w-full py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs uppercase shadow-lg transition cursor-pointer"
                 >
-                  <ScanLine className="w-4 h-4" />
-                  <span>Simulate Instant QR Scan & Link</span>
+                  Simulate Instant QR Scan & Link
                 </button>
-
                 <button
                   type="button"
                   onClick={() => setActiveView('list')}
-                  className={`w-full py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                    isDark ? 'border-slate-800 text-slate-400 hover:bg-slate-800' : 'border-slate-300 text-slate-600 hover:bg-slate-100'
-                  }`}
+                  className="w-full py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer text-slate-400"
                 >
-                  Cancel Scanner
+                  Cancel
                 </button>
               </div>
             </div>
           )}
 
-          {/* ==================================================== */}
-          {/* 3. SHOW COMPANION QR CODE (Laptop waiting to be scanned) */}
-          {/* ==================================================== */}
           {activeView === 'show_qr' && (
             <div className="p-5 sm:p-6 flex flex-col items-center">
-              <div className="w-full max-w-md text-center mb-4">
-                <h3 className={`text-base font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  Link as Desktop Web Companion
-                </h3>
-                <p className={`text-xs ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Scan this code using ChatNova on your mobile phone to authorize this browser session.
-                </p>
-              </div>
-
-              {/* DYNAMIC QR CODE DISPLAY */}
-              <div
-                className={`relative p-5 rounded-3xl border shadow-2xl flex flex-col items-center justify-center transition-all ${
-                  isDark ? 'bg-white text-slate-950 border-slate-700' : 'bg-white text-slate-950 border-slate-200'
-                }`}
-              >
-                {/* QR Code Container */}
+              <div className="p-5 rounded-3xl bg-white text-slate-950 border shadow-2xl flex flex-col items-center justify-center">
                 <div className="relative w-52 h-52 sm:w-60 sm:h-60 bg-white flex items-center justify-center rounded-2xl overflow-hidden p-2">
-                  {/* High fidelity SVG QR pattern */}
-                  <svg className="w-full h-full" viewBox="0 0 100 100" fill="none">
-                    {/* Top-Left Finder */}
-                    <rect x="5" y="5" width="28" height="28" rx="4" fill="#0b141a" />
-                    <rect x="9" y="9" width="20" height="20" rx="2" fill="#ffffff" />
-                    <rect x="13" y="13" width="12" height="12" rx="1" fill="#059669" />
-
-                    {/* Top-Right Finder */}
-                    <rect x="67" y="5" width="28" height="28" rx="4" fill="#0b141a" />
-                    <rect x="71" y="9" width="20" height="20" rx="2" fill="#ffffff" />
-                    <rect x="75" y="13" width="12" height="12" rx="1" fill="#059669" />
-
-                    {/* Bottom-Left Finder */}
-                    <rect x="5" y="67" width="28" height="28" rx="4" fill="#0b141a" />
-                    <rect x="9" y="71" width="20" height="20" rx="2" fill="#ffffff" />
-                    <rect x="13" y="75" width="12" height="12" rx="1" fill="#059669" />
-
-                    {/* Data Matrix Bits */}
-                    <rect x="38" y="8" width="6" height="6" fill="#0b141a" />
-                    <rect x="48" y="14" width="6" height="6" fill="#0b141a" />
-                    <rect x="58" y="8" width="6" height="6" fill="#0b141a" />
-                    <rect x="38" y="24" width="6" height="6" fill="#0b141a" />
-                    <rect x="48" y="28" width="6" height="6" fill="#059669" />
-                    <rect x="8" y="38" width="6" height="6" fill="#0b141a" />
-                    <rect x="18" y="44" width="6" height="6" fill="#0b141a" />
-                    <rect x="28" y="38" width="6" height="6" fill="#059669" />
-                    <rect x="38" y="38" width="6" height="6" fill="#0b141a" />
-                    <rect x="56" y="38" width="6" height="6" fill="#0b141a" />
-                    <rect x="68" y="44" width="6" height="6" fill="#059669" />
-                    <rect x="78" y="38" width="6" height="6" fill="#0b141a" />
-                    <rect x="88" y="44" width="6" height="6" fill="#0b141a" />
-                    <rect x="38" y="52" width="6" height="6" fill="#059669" />
-                    <rect x="48" y="58" width="6" height="6" fill="#0b141a" />
-                    <rect x="58" y="52" width="6" height="6" fill="#0b141a" />
-                    <rect x="38" y="68" width="6" height="6" fill="#0b141a" />
-                    <rect x="48" y="74" width="6" height="6" fill="#059669" />
-                    <rect x="58" y="68" width="6" height="6" fill="#0b141a" />
-                    <rect x="68" y="74" width="6" height="6" fill="#0b141a" />
-                    <rect x="78" y="68" width="6" height="6" fill="#059669" />
-                    <rect x="88" y="74" width="6" height="6" fill="#0b141a" />
-                    <rect x="38" y="84" width="6" height="6" fill="#0b141a" />
-                    <rect x="52" y="88" width="6" height="6" fill="#0b141a" />
-                    <rect x="68" y="84" width="6" height="6" fill="#0b141a" />
-                    <rect x="82" y="88" width="6" height="6" fill="#0b141a" />
-                  </svg>
-
-                  {/* ChatNova Emblem Center Badge */}
+                  <QrCode className="w-40 h-40 text-emerald-600" />
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                    <div className="w-11 h-11 rounded-xl bg-slate-900 border-2 border-emerald-500 flex items-center justify-center text-white shadow-lg">
+                    <div className="w-10 h-10 rounded-xl bg-slate-900 border-2 border-emerald-500 flex items-center justify-center text-white shadow-lg">
                       <Lock className="w-5 h-5 text-emerald-400" />
                     </div>
                   </div>
-
-                  {/* QR Expired Overlay */}
-                  {qrExpired && (
-                    <div className="absolute inset-0 bg-white/95 backdrop-blur-xs flex flex-col items-center justify-center text-slate-900 p-4 text-center">
-                      <AlertTriangle className="w-8 h-8 text-amber-500 mb-1" />
-                      <p className="text-xs font-bold">QR Code Expired</p>
-                      <p className="text-[10px] text-slate-600 mb-3">To maintain forward secrecy, tokens auto-expire.</p>
-                      <button
-                        type="button"
-                        onClick={refreshQRToken}
-                        className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition flex items-center gap-2 cursor-pointer shadow"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" />
-                        <span>Refresh QR</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-
-                {/* Expiry countdown and token pill */}
-                <div className="w-full mt-3 pt-3 border-t border-slate-200 flex items-center justify-between text-xs font-mono">
-                  <div className="flex items-center gap-1.5 text-slate-700">
-                    <RefreshCw className={`w-3.5 h-3.5 text-emerald-600 ${qrTimer > 0 ? 'animate-spin' : ''}`} />
-                    <span>Expires in: <strong>{qrTimer}s</strong></span>
-                  </div>
-                  <span className="text-[11px] font-bold text-emerald-700">{qrToken.substring(0, 14)}</span>
                 </div>
               </div>
-
-              {/* Instructions steps */}
-              <div
-                className={`w-full max-w-md mt-5 p-4 rounded-2xl border text-xs space-y-2 ${
-                  isDark ? 'bg-[#14232f] border-slate-800' : 'bg-slate-50 border-slate-200'
-                }`}
+              <button
+                type="button"
+                onClick={() => setActiveView('list')}
+                className="mt-4 px-4 py-2 rounded-xl text-xs font-semibold bg-slate-800 text-slate-300"
               >
-                <p className="font-bold text-emerald-600 dark:text-emerald-400 uppercase font-mono tracking-wider text-[11px]">
-                  How to link your account:
-                </p>
-                <ol className={`space-y-1.5 list-decimal list-inside text-[11px] leading-relaxed ${isDark ? 'text-slate-300' : 'text-slate-700'}`}>
-                  <li>Open <strong>ChatNova</strong> on your mobile phone</li>
-                  <li>Tap <strong>3-dots Menu</strong> or <strong>Settings &gt; Linked Devices</strong></li>
-                  <li>Tap <strong>Link a Device</strong> and point your camera here</li>
-                </ol>
-              </div>
-
-              {/* Quick simulation buttons */}
-              <div className="w-full max-w-md mt-4 flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleLinkNewDevice({
-                      name: 'Chrome on macOS (M3)',
-                      type: 'laptop',
-                      os: 'macOS Sonoma',
-                      browser: 'Chrome 126.0',
-                    });
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white dark:text-slate-950 font-bold text-xs transition cursor-pointer flex items-center justify-center gap-1.5 shadow"
-                >
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Simulate Phone Scanned This QR</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setActiveView('list')}
-                  className={`px-4 py-2.5 rounded-xl border text-xs font-semibold transition cursor-pointer ${
-                    isDark ? 'border-slate-800 hover:bg-slate-800 text-slate-400' : 'border-slate-300 hover:bg-slate-100 text-slate-600'
-                  }`}
-                >
-                  Back
-                </button>
-              </div>
+                Back to Devices
+              </button>
             </div>
           )}
         </div>
-
-        {/* MODAL CONFIRMATION: LOGOUT SINGLE DEVICE */}
-        {selectedDeviceToLogout && (
-          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-            <div
-              className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl ${
-                isDark ? 'bg-[#18262f] border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'
-              }`}
-            >
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-3 mx-auto">
-                <LogOut className="w-6 h-6" />
-              </div>
-
-              <h4 className="text-base font-bold text-center mb-1">
-                Log Out of {selectedDeviceToLogout.name}?
-              </h4>
-              <p className={`text-xs text-center mb-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                This will immediately terminate the session and revoke cryptographic encryption ratchets for this companion device.
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedDeviceToLogout(null)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                    isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleLogoutDevice(selectedDeviceToLogout.id)}
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow"
-                >
-                  Log Out Device
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* MODAL CONFIRMATION: LOGOUT ALL DEVICES */}
-        {showLogoutAllConfirm && (
-          <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
-            <div
-              className={`w-full max-w-sm rounded-3xl p-6 border shadow-2xl ${
-                isDark ? 'bg-[#18262f] border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'
-              }`}
-            >
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/15 border border-rose-500/30 flex items-center justify-center text-rose-500 mb-3 mx-auto">
-                <Trash2 className="w-6 h-6" />
-              </div>
-
-              <h4 className="text-base font-bold text-center mb-1">
-                Log Out from ALL Devices?
-              </h4>
-              <p className={`text-xs text-center mb-5 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                All companion web, desktop, and tablet sessions will be revoked instantly across all network nodes.
-              </p>
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowLogoutAllConfirm(false)}
-                  className={`flex-1 py-2.5 rounded-xl border text-xs font-bold transition cursor-pointer ${
-                    isDark ? 'border-slate-700 hover:bg-slate-800 text-slate-300' : 'border-slate-300 hover:bg-slate-100 text-slate-700'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleLogoutAllDevices}
-                  className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold transition cursor-pointer shadow"
-                >
-                  Revoke All Sessions
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
