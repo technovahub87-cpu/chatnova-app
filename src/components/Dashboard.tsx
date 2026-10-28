@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   Shield,
   Lock,
@@ -28,7 +28,8 @@ import {
   Sparkles,
   Laptop,
   QrCode,
-  ChevronRight
+  ChevronRight,
+  Camera
 } from 'lucide-react';
 import { User, Chat, Message, CallLog, StatusStory } from '../types';
 import {
@@ -52,102 +53,34 @@ interface DashboardProps {
   currentUser: User;
   onLogout: () => void;
   onOpenMasterAdmin: () => void;
+  onUpdateUser?: (updatedUser: User) => void;
 }
 
 export const Dashboard: React.FC<DashboardProps> = ({
   currentUser,
   onLogout,
   onOpenMasterAdmin,
+  onUpdateUser,
 }) => {
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
 
-  // Pre-seed with a group chat if none exists yet
+  // FRESH USER EXPERIENCE & PRIVACY:
+  // By default, start with an empty chat list so no random names/chats show up until searched/added via exact @username or group creation.
   const [chats, setChats] = useState<Chat[]>(() => {
-    const existingGroup = INITIAL_CHATS.find((c) => c.isGroup);
-    if (existingGroup) return INITIAL_CHATS;
-
-    const sampleGroup: Chat = {
-      id: 'group_relay_squad',
-      participant: {
-        id: 'group_relay_squad_root',
-        customId: '@group_relay_squad',
-        displayName: 'Quantum Relay Squad',
-        avatar: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=200&auto=format&fit=crop&q=80',
-        bio: 'Offshore mesh audit team',
-        status: 'online',
-        lastSeen: '4 members',
-        publicKeyFingerprint: generateFingerprint(),
-        role: 'user',
-        twoFactorEnabled: true,
-        createdAt: '2026-03-01',
-      },
-      isGroup: true,
-      groupName: 'Quantum Relay Squad',
-      groupIcon: 'https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=200&auto=format&fit=crop&q=80',
-      groupAdminId: currentUser.id,
-      groupDescription: 'Multi-party encrypted mesh coordination & zero-knowledge audit channel.',
-      groupMembers: [currentUser, INITIAL_USERS[1], INITIAL_USERS[2], INITIAL_USERS[3]],
-      unreadCount: 1,
-      isPinned: true,
-      isMuted: false,
-      encryptionFingerprint: '4491 8802 1109 3381 7720 5410',
-      lastMessage: {
-        id: 'msg_group_init',
-        chatId: 'group_relay_squad',
-        senderId: INITIAL_USERS[1].id,
-        senderName: INITIAL_USERS[1].displayName,
-        type: 'text',
-        content: 'All nodes in the Zurich enclave passed the zero-leak benchmark. Ready for rotation.',
-        timestamp: '08:44 AM',
-        status: 'delivered',
-      },
-    };
-
-    return [sampleGroup, ...INITIAL_CHATS];
+    // If user already has seeded interactions or we want clean fresh state:
+    return [];
   });
 
-  const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>(() => {
-    return {
-      ...INITIAL_MESSAGES,
-      group_relay_squad: [
-        {
-          id: 'm_g1',
-          chatId: 'group_relay_squad',
-          senderId: currentUser.id,
-          senderName: currentUser.displayName,
-          type: 'system',
-          content: 'You created group "Quantum Relay Squad" with 4 members. Multi-party sender keys active.',
-          timestamp: '08:30 AM',
-          status: 'read',
-        },
-        {
-          id: 'm_g2',
-          chatId: 'group_relay_squad',
-          senderId: INITIAL_USERS[2].id,
-          senderName: INITIAL_USERS[2].displayName,
-          type: 'text',
-          content: 'Marcus online. Air-gapped testbench linked to offshore relay.',
-          timestamp: '08:35 AM',
-          status: 'read',
-        },
-        {
-          id: 'm_g3',
-          chatId: 'group_relay_squad',
-          senderId: INITIAL_USERS[1].id,
-          senderName: INITIAL_USERS[1].displayName,
-          type: 'text',
-          content: 'All nodes in the Zurich enclave passed the zero-leak benchmark. Ready for rotation.',
-          timestamp: '08:44 AM',
-          status: 'delivered',
-        },
-      ],
-    };
-  });
+  const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>({});
 
-  const [activeChatId, setActiveChatId] = useState<string | null>('group_relay_squad');
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
+  // Profile Photo Upload Ref & State
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>(currentUser.avatar);
+
   // Calls state
   const [calls, setCalls] = useState<CallLog[]>(INITIAL_CALLS);
   const [activeCall, setActiveCall] = useState<{
@@ -173,6 +106,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   // Global broadcast toast from WebSocket
   const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
+
+  // Handle Profile Photo Local Upload
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setAvatarPreview(base64String);
+        const updatedUser: User = { ...currentUser, avatar: base64String };
+        if (onUpdateUser) {
+          onUpdateUser(updatedUser);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Setup WebSocket listeners
   useEffect(() => {
@@ -338,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       userId: currentUser.id,
       userName: currentUser.displayName,
       customId: currentUser.customId,
-      userAvatar: currentUser.avatar,
+      userAvatar: avatarPreview,
       text: newStatusText.trim(),
       timestamp: 'Just now',
       isViewed: false,
@@ -395,7 +345,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div
             className="flex items-center gap-2.5 cursor-pointer select-none"
             onClick={() => {
-              // Secret stealth backdoor: 5 rapid clicks on logo opens master admin for authorized operators
               (window as any).__chatnova_logo_taps = ((window as any).__chatnova_logo_taps || 0) + 1;
               clearTimeout((window as any).__chatnova_logo_timer);
               if ((window as any).__chatnova_logo_taps >= 5) {
@@ -409,8 +358,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
             }}
             title="ChatNova Enclave"
           >
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center shadow-md shadow-emerald-900/20">
-              <Shield className="w-4.5 h-4.5 text-white" />
+            {/* PROFILE PHOTO UPLOAD WIDGET IN HEADER */}
+            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Change Profile Photo">
+              <img
+                src={avatarPreview}
+                alt={currentUser.displayName}
+                className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/50"
+              />
+              <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                <Camera className="w-4 h-4 text-white" />
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+                accept="image/*"
+                className="hidden"
+              />
             </div>
             <div>
               <h1
@@ -430,7 +394,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center gap-1.5 relative">
             <ThemeToggle />
 
-            {/* STRICT RBAC: Master Admin button is completely hidden from normal users */}
             {currentUser.role === 'master_admin' && (
               <button
                 type="button"
@@ -467,7 +430,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     : 'bg-white border-slate-200 text-slate-800 shadow-xl'
                 }`}
               >
-                {/* Create Group Option (Requested) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -496,7 +458,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span>New Custom ID Chat</span>
                 </button>
 
-                {/* Linked Devices Option (WhatsApp style) */}
                 <button
                   type="button"
                   onClick={() => {
@@ -636,7 +597,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </button>
         </div>
 
-        {/* SEARCH BAR (for Chats and Contacts) */}
+        {/* SEARCH BAR */}
         {(activeTab === 'chats' || activeTab === 'calls') && (
           <div
             className={`p-3 border-b transition-colors duration-200 ${
@@ -691,7 +652,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       : 'hover:bg-slate-50'
                   }`}
                 >
-                  {/* Contact / Group Avatar */}
                   <div className="relative shrink-0">
                     <img
                       src={chat.groupIcon || chat.participant.avatar}
@@ -709,7 +669,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     ) : null}
                   </div>
 
-                  {/* Contact / Group Info & Message Preview */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5 truncate">
@@ -786,7 +745,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   isDark ? 'text-slate-500' : 'text-slate-400'
                 }`}
               >
-                No encrypted conversations match your query.
+                No encrypted conversations yet. Click the menu (...) to start a new Custom ID chat or create a group!
               </div>
             )}
           </div>
@@ -803,7 +762,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="flex items-center gap-3">
                 <div className="relative">
                   <img
-                    src={currentUser.avatar}
+                    src={avatarPreview}
                     alt=""
                     className="w-12 h-12 rounded-full object-cover"
                   />
@@ -833,103 +792,38 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 Add Status
               </button>
             </div>
-
-            <div>
-              <h5 className="text-[11px] uppercase tracking-wider font-mono text-emerald-600 dark:text-emerald-400 font-bold mb-2 px-1">
-                Recent Updates (24h Auto-Expire)
-              </h5>
-              <div className="space-y-1">
-                {statuses.map((story) => (
-                  <div
-                    key={story.id}
-                    onClick={() => setSelectedStory(story)}
-                    className={`flex items-center gap-3 p-2.5 rounded-2xl transition cursor-pointer ${
-                      isDark ? 'hover:bg-[#202c33]' : 'hover:bg-slate-100 bg-white border border-slate-100 shadow-xs'
-                    }`}
-                  >
-                    <div className="w-12 h-12 rounded-full p-0.5 ring-2 ring-emerald-500">
-                      <img
-                        src={story.userAvatar}
-                        alt=""
-                        className="w-full h-full rounded-full object-cover"
-                      />
-                    </div>
-                    <div className="flex-1">
-                      <div className="flex items-center justify-between">
-                        <p className={`font-semibold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                          {story.userName}
-                        </p>
-                        <span className={`text-[10px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                          {story.timestamp}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-emerald-600 dark:text-emerald-400 font-mono truncate font-medium">
-                        {story.customId}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
           </div>
         )}
 
-        {/* TAB 3: CALLS LOGS */}
+        {/* TAB 3: CALLS */}
         {activeTab === 'calls' && (
-          <div
-            className={`flex-1 overflow-y-auto divide-y transition-colors ${
-              isDark ? 'divide-slate-800/60' : 'divide-slate-100'
-            }`}
-          >
+          <div className="flex-1 overflow-y-auto p-4 space-y-2">
+            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">
+              Recent Encrypted Calls
+            </h3>
             {calls.map((call) => (
               <div
                 key={call.id}
-                className={`flex items-center justify-between px-4 py-3 transition ${
-                  isDark ? 'hover:bg-[#202c33]/60' : 'hover:bg-slate-50 bg-white'
+                className={`p-3 rounded-2xl border flex items-center justify-between ${
+                  isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'
                 }`}
               >
                 <div className="flex items-center gap-3">
-                  <img
-                    src={call.participant.avatar}
-                    alt=""
-                    className="w-10 h-10 rounded-full object-cover"
-                  />
+                  <img src={call.participantAvatar} alt="" className="w-10 h-10 rounded-full object-cover" />
                   <div>
-                    <h4 className={`font-semibold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      {call.participant.displayName}
+                    <h4 className={`font-semibold text-xs ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                      {call.participantName}
                     </h4>
-                    <p className={`text-[11px] font-mono flex items-center gap-1.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      <span className={call.direction === 'missed' ? 'text-rose-500 font-semibold' : 'text-emerald-600 dark:text-emerald-400 font-semibold'}>
-                        {call.direction === 'incoming' && '↙ Incoming'}
-                        {call.direction === 'outgoing' && '↗ Outgoing'}
-                        {call.direction === 'missed' && '✕ Missed'}
-                      </span>
-                      <span>•</span>
-                      <span>{call.timestamp}</span>
-                    </p>
+                    <p className="text-[10px] text-slate-400 font-mono">{call.timestamp}</p>
                   </div>
                 </div>
-
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setActiveCall({ participant: call.participant, type: 'voice' })}
-                    className={`p-2 rounded-full transition cursor-pointer ${
-                      isDark ? 'hover:bg-slate-700/60 text-emerald-400' : 'hover:bg-slate-100 text-emerald-600'
-                    }`}
-                    title="Voice Call"
+                    onClick={() => setActiveCall({ participant: { id: call.participantId, customId: call.participantCustomId, displayName: call.participantName, avatar: call.participantAvatar } as User, type: 'voice' })}
+                    className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition cursor-pointer"
                   >
-                    <Phone className="w-4 h-4" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveCall({ participant: call.participant, type: 'video' })}
-                    className={`p-2 rounded-full transition cursor-pointer ${
-                      isDark ? 'hover:bg-slate-700/60 text-teal-400' : 'hover:bg-slate-100 text-teal-600'
-                    }`}
-                    title="Video Call"
-                  >
-                    <Video className="w-4 h-4" />
+                    <PhoneCall className="w-4 h-4" />
                   </button>
                 </div>
               </div>
@@ -937,428 +831,134 @@ export const Dashboard: React.FC<DashboardProps> = ({
           </div>
         )}
 
-        {/* TAB 4: SETTINGS & PRIVACY HUB */}
+        {/* TAB 4: SETTINGS */}
         {activeTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div
-              className={`p-4 rounded-2xl border flex items-center gap-3 transition-colors ${
-                isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'
-              }`}
-            >
-              <img
-                src={currentUser.avatar}
-                alt=""
-                className="w-14 h-14 rounded-full object-cover ring-2 ring-emerald-500"
-              />
-              <div className="flex-1 min-w-0">
-                <h4 className={`font-bold text-base truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                  {currentUser.displayName}
-                </h4>
-                <p className="text-xs font-mono font-bold text-emerald-600 dark:text-emerald-400">
-                  {currentUser.customId}
-                </p>
-                <p className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                  {currentUser.bio}
-                </p>
-              </div>
-            </div>
-
-            <ThemeToggle variant="row" />
-
-            <div
-              className={`p-4 rounded-2xl border space-y-3 transition-colors ${
-                isDark
-                  ? 'bg-[#14232f] border-emerald-500/30'
-                  : 'bg-emerald-50/70 border-emerald-200 shadow-xs'
-              }`}
-            >
-              <div className="flex items-center gap-2 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
-                <Lock className="w-4 h-4" />
-                <span>Zero-Knowledge Encryption Vault</span>
-              </div>
-              <div>
-                <p className={`text-[10px] uppercase font-mono ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-                  Public Key Fingerprint
-                </p>
-                <p className={`text-xs font-mono font-bold mt-0.5 break-all ${isDark ? 'text-slate-200' : 'text-slate-800'}`}>
-                  {currentUser.publicKeyFingerprint}
-                </p>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateGroupModal(true)}
-                className={`w-full p-3.5 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
-                  isDark
-                    ? 'bg-[#202c33] hover:bg-[#28373f] border-slate-800'
-                    : 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-500 flex items-center justify-center">
-                    <Users className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      Create Encrypted Group
-                    </p>
-                    <p className={`text-[10px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Multi-recipient E2EE ratchet
-                    </p>
-                  </div>
+            <div className={`p-4 rounded-2xl border ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <h3 className="font-bold text-sm mb-1 text-emerald-500">Privacy & Security</h3>
+              <p className="text-xs text-slate-400 mb-3">End-to-end encrypted session active on custom node.</p>
+              <div className="space-y-2 text-xs">
+                <div className="flex justify-between py-1 border-b border-slate-700/50">
+                  <span>Identity Key Fingerprint</span>
+                  <span className="font-mono text-emerald-400">{currentUser.publicKeyFingerprint}</span>
                 </div>
-                <Plus className="w-4 h-4 text-emerald-500" />
-              </button>
-
-              {/* Linked Devices Option in Settings Tab */}
-              <button
-                type="button"
-                onClick={() => setShowLinkedDevicesModal(true)}
-                className={`w-full p-3.5 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
-                  isDark
-                    ? 'bg-[#202c33] hover:bg-[#28373f] border-slate-800'
-                    : 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm'
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-500 flex items-center justify-center">
-                    <Laptop className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                      Linked Devices
-                    </p>
-                    <p className={`text-[10px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                      Link Web, Desktop, & Tablets via QR code
-                    </p>
-                  </div>
+                <div className="flex justify-between py-1">
+                  <span>Account Role</span>
+                  <span className="font-mono uppercase">{currentUser.role}</span>
                 </div>
-                <ChevronRight className="w-4 h-4 text-slate-400" />
-              </button>
-
-              {currentUser.role === 'master_admin' && (
-                <button
-                  type="button"
-                  onClick={onOpenMasterAdmin}
-                  className={`w-full p-3.5 rounded-2xl border text-left transition flex items-center justify-between cursor-pointer ${
-                    isDark
-                      ? 'bg-[#202c33] hover:bg-[#28373f] border-slate-800'
-                      : 'bg-white hover:bg-slate-50 border-slate-200 shadow-sm'
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center">
-                      <ShieldAlert className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <p className={`text-xs font-bold ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                        Master Admin Portal
-                      </p>
-                      <p className={`text-[10px] font-mono ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                        Route: /master-admin (HSM Protected)
-                      </p>
-                    </div>
-                  </div>
-                  <ExternalLink className="w-4 h-4 text-slate-400" />
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={onLogout}
-                className="w-full p-3.5 rounded-2xl bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 text-left transition flex items-center justify-between cursor-pointer"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-rose-500/20 text-rose-500 flex items-center justify-center">
-                    <LogOut className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-xs font-bold text-rose-600 dark:text-rose-400">
-                      Wipe Ephemeral Session
-                    </p>
-                    <p className="text-[10px] text-rose-500/80">
-                      Log out and clear memory cache
-                    </p>
-                  </div>
-                </div>
-              </button>
+              </div>
             </div>
           </div>
         )}
+      </div>
 
-        {/* FLOATING ACTION BUTTONS (FAB) FOR NEW CHAT & GROUP */}
-        {activeTab === 'chats' && (
-          <div className="absolute bottom-6 right-6 flex flex-col gap-2 z-30">
-            {/* Create Group Button */}
-            <button
-              type="button"
-              onClick={() => setShowCreateGroupModal(true)}
-              className="w-11 h-11 rounded-2xl bg-[#202c33] hover:bg-slate-700 text-emerald-400 border border-emerald-500/30 flex items-center justify-center shadow-lg transition transform active:scale-95 cursor-pointer ml-auto"
-              title="Create Encrypted Group"
-            >
-              <Users className="w-5 h-5" />
-            </button>
-
-            {/* Direct Chat Button */}
+      {/* RIGHT PANE / CHAT ROOM OR WELCOME PLACEHOLDER */}
+      <div className="flex-1 h-full flex flex-col">
+        {selectedChat ? (
+          <ChatRoom
+            currentUser={currentUser}
+            chat={selectedChat}
+            messages={messagesMap[selectedChat.id] || []}
+            onSendMessage={handleSendMessage}
+            onBack={() => setActiveChatId(null)}
+            onUpdateChat={handleUpdateChat}
+            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
+          />
+        ) : (
+          <div className="flex-1 hidden md:flex flex-col items-center justify-center p-8 text-center select-none bg-inherit">
+            <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-4 shadow-xl">
+              <Shield className="w-10 h-10" />
+            </div>
+            <h2 className="text-xl font-bold mb-2">ChatNova Secure Enclave</h2>
+            <p className="text-xs text-slate-400 max-w-sm mb-6">
+              Select an encrypted conversation or create a new chat using a contact's unique Custom ID (`@username`) from the menu.
+            </p>
             <button
               type="button"
               onClick={() => setShowNewChatModal(true)}
-              className="w-14 h-14 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-white dark:text-slate-950 flex items-center justify-center shadow-xl transition transform active:scale-95 cursor-pointer"
-              title="Start New Encrypted Chat"
+              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition font-mono shadow-lg cursor-pointer flex items-center gap-2"
             >
-              <UserPlus className="w-6 h-6" />
+              <UserPlus className="w-4 h-4" />
+              <span>Start Custom ID Chat</span>
             </button>
           </div>
         )}
       </div>
 
-      {/* RIGHT PANE: ACTIVE CHAT ROOM (OR WELCOME DESKTOP EMPTY STATE) */}
-      <div className={`flex-1 h-full flex flex-col ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-        {selectedChat ? (
-          <ChatRoom
-            chat={selectedChat}
-            currentUser={currentUser}
-            messages={messagesMap[selectedChat.id] || []}
-            onBack={() => setActiveChatId(null)}
-            onSendMessage={handleSendMessage}
-            onStartCall={(type) =>
-              setActiveCall({ participant: selectedChat.participant, type })
-            }
-            onUpdateChat={handleUpdateChat}
-          />
-        ) : (
-          <div
-            className={`flex-1 flex flex-col items-center justify-center p-8 text-center select-none transition-colors duration-200 ${
-              isDark ? 'bg-[#0b141a]' : 'bg-[#f0f2f5]'
-            }`}
-          >
-            <div
-              className={`w-24 h-24 rounded-3xl border-2 flex items-center justify-center mb-6 shadow-xl ${
-                isDark
-                  ? 'bg-gradient-to-br from-[#11242e] to-[#0a171f] border-emerald-500/40'
-                  : 'bg-white border-emerald-400/60 shadow-emerald-900/10'
-              }`}
-            >
-              <Shield className="w-12 h-12 text-emerald-500" />
-            </div>
-            <h2
-              className={`text-2xl font-bold mb-2 ${
-                isDark ? 'text-white' : 'text-slate-900'
-              }`}
-            >
-              Chat<span className="text-emerald-500 font-extrabold">Nova</span> Web & Enclave
-            </h2>
-            <p className="text-xs font-mono uppercase tracking-widest text-emerald-600 dark:text-emerald-400 font-bold mb-3">
-              Your Privacy • Our Priority
-            </p>
-            <p
-              className={`text-xs max-w-sm leading-relaxed mb-6 ${
-                isDark ? 'text-slate-400' : 'text-slate-600'
-              }`}
-            >
-              Select a conversation, direct channel, or group from the left pane. All transmissions are protected by 256-bit Post-Quantum ratchets.
-            </p>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => setShowCreateGroupModal(true)}
-                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs transition flex items-center gap-2 cursor-pointer font-mono shadow-md border border-slate-700"
-              >
-                <Users className="w-4 h-4 text-emerald-400" />
-                <span>Create Group</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setShowNewChatModal(true)}
-                className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white dark:text-slate-950 font-bold text-xs transition flex items-center gap-2 cursor-pointer font-mono shadow-md"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>Direct Custom ID</span>
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* CREATE GROUP MODAL */}
-      <CreateGroupModal
-        isOpen={showCreateGroupModal}
-        currentUser={currentUser}
-        onClose={() => setShowCreateGroupModal(false)}
-        onCreateGroup={handleCreateGroup}
-      />
-
-      {/* NEW CHAT WITH CUSTOM ID MODAL */}
+      {/* NEW CHAT MODAL */}
       {showNewChatModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div
-            className={`w-full max-w-md border rounded-3xl p-6 shadow-2xl transition-colors ${
-              isDark ? 'bg-[#111b21] border-slate-800' : 'bg-white border-slate-200'
-            }`}
-          >
-            <div
-              className={`flex items-center justify-between pb-3 border-b mb-4 ${
-                isDark ? 'border-slate-800' : 'border-slate-200'
-              }`}
-            >
-              <div className="flex items-center gap-2">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-emerald-500" />
-                <h3
-                  className={`font-bold text-base ${
-                    isDark ? 'text-white' : 'text-slate-900'
-                  }`}
-                >
-                  Start New Encrypted Chat
-                </h3>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  setShowNewChatModal(false);
-                  setNewChatError('');
-                }}
-                className={`w-7 h-7 rounded-full flex items-center justify-center transition cursor-pointer ${
-                  isDark
-                    ? 'bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white'
-                    : 'bg-slate-100 hover:bg-slate-200 text-slate-500 hover:text-slate-900'
-                }`}
-              >
-                <X className="w-4 h-4" />
+                <span>New Custom ID Chat</span>
+              </h3>
+              <button onClick={() => setShowNewChatModal(false)} className="p-1 rounded-full hover:bg-slate-700/50 cursor-pointer">
+                <X className="w-5 h-5" />
               </button>
             </div>
-
-            {newChatError && (
-              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs">
-                {newChatError}
-              </div>
-            )}
-
             <form onSubmit={handleCreateNewChat} className="space-y-4">
               <div>
-                <label
-                  className={`block text-xs font-medium mb-1 ${
-                    isDark ? 'text-slate-300' : 'text-slate-700'
-                  }`}
-                >
-                  Recipient Custom Username / ID
-                </label>
-                <div className="relative">
-                  <span className="absolute left-3.5 top-2.5 text-emerald-600 dark:text-emerald-400 font-mono font-bold text-sm">
-                    @
-                  </span>
-                  <input
-                    type="text"
-                    value={newChatCustomId.replace(/^@/, '')}
-                    onChange={(e) =>
-                      setNewChatCustomId(
-                        e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '')
-                      )
-                    }
-                    placeholder="elena_prime or marcus_vance"
-                    className={`w-full rounded-xl pl-8 pr-4 py-2.5 text-xs font-mono transition focus:outline-none focus:ring-2 focus:ring-emerald-500 border ${
-                      isDark
-                        ? 'bg-[#0b141a] border-slate-700 text-white placeholder-slate-500'
-                        : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white'
-                    }`}
-                    required
-                  />
-                </div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Enter Recipient Custom ID</label>
+                <input
+                  type="text"
+                  value={newChatCustomId}
+                  onChange={(e) => setNewChatCustomId(e.target.value)}
+                  placeholder="@username"
+                  className={`w-full px-4 py-2.5 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isDark ? 'bg-[#202c33] border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                  autoFocus
+                />
               </div>
-
-              <div>
-                <span
-                  className={`text-[11px] font-mono block mb-1.5 ${
-                    isDark ? 'text-slate-400' : 'text-slate-500'
-                  }`}
-                >
-                  Available Test Identities:
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  {INITIAL_USERS.filter((u) => u.id !== currentUser.id && !u.isBanned).map((u) => (
-                    <button
-                      key={u.id}
-                      type="button"
-                      onClick={() => setNewChatCustomId(u.customId)}
-                      className={`px-2.5 py-1 rounded-lg border text-[11px] font-mono transition cursor-pointer ${
-                        isDark
-                          ? 'bg-slate-900 border-slate-800 text-emerald-300 hover:border-emerald-500/50'
-                          : 'bg-slate-100 border-slate-200 text-emerald-800 hover:border-emerald-500'
-                      }`}
-                    >
-                      {u.customId}
-                    </button>
-                  ))}
-                </div>
+              {newChatError && <p className="text-xs text-rose-500 font-medium">{newChatError}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowNewChatModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-700/30 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer">Open Chat</button>
               </div>
-
-              <button
-                type="submit"
-                className="w-full py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white dark:text-slate-950 font-bold text-xs transition cursor-pointer shadow"
-              >
-                Open Encrypted Channel
-              </button>
             </form>
           </div>
         </div>
       )}
 
-      {/* NEW STATUS STORY MODAL */}
-      {showNewStatusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div
-            className={`w-full max-w-sm border rounded-3xl p-6 shadow-2xl transition-colors ${
-              isDark ? 'bg-[#111b21] border-slate-800' : 'bg-white border-slate-200'
-            }`}
-          >
-            <h3
-              className={`font-bold text-base mb-2 ${
-                isDark ? 'text-white' : 'text-slate-900'
-              }`}
-            >
-              Publish 24h Encrypted Story
-            </h3>
-            <p
-              className={`text-xs mb-4 ${
-                isDark ? 'text-slate-400' : 'text-slate-600'
-              }`}
-            >
-              Your status will be broadcast to approved contacts and self-destruct in 24 hours.
-            </p>
+      {/* CREATE GROUP MODAL */}
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          currentUser={currentUser}
+          onClose={() => setShowCreateGroupModal(false)}
+          onCreateGroup={handleCreateGroup}
+        />
+      )}
 
+      {/* LINKED DEVICES MODAL */}
+      {showLinkedDevicesModal && (
+        <LinkedDevicesModal onClose={() => setShowLinkedDevicesModal(false)} />
+      )}
+
+      {/* NEW STATUS MODAL */}
+      {showNewStatusModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <CircleDot className="w-5 h-5 text-emerald-500" />
+                <span>Post Encrypted Status</span>
+              </h3>
+              <button onClick={() => setShowNewStatusModal(false)} className="p-1 rounded-full hover:bg-slate-700/50 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
             <form onSubmit={handlePostStatus} className="space-y-4">
               <textarea
-                rows={3}
                 value={newStatusText}
                 onChange={(e) => setNewStatusText(e.target.value)}
-                placeholder="What's happening? (Encrypted update)..."
-                className={`w-full rounded-xl p-3 text-xs transition focus:outline-none focus:ring-2 focus:ring-emerald-500 border ${
-                  isDark
-                    ? 'bg-[#0b141a] border-slate-700 text-white placeholder-slate-500'
-                    : 'bg-slate-50 border-slate-300 text-slate-900 placeholder-slate-400 focus:bg-white'
-                }`}
-                required
+                placeholder="Type your status story..."
+                rows={3}
+                className={`w-full px-4 py-2.5 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isDark ? 'bg-[#202c33] border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
+                autoFocus
               />
-
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowNewStatusModal(false)}
-                  className={`flex-1 py-2 rounded-xl text-xs font-semibold cursor-pointer ${
-                    isDark
-                      ? 'bg-slate-800 text-slate-300 hover:bg-slate-700'
-                      : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-                  }`}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white dark:text-slate-950 text-xs font-bold cursor-pointer shadow"
-                >
-                  Publish
-                </button>
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowNewStatusModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-700/30 cursor-pointer">Cancel</button>
+                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer">Post Status</button>
               </div>
             </form>
           </div>
@@ -1368,36 +968,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
       {/* CALL MODAL */}
       {activeCall && (
         <CallModal
+          currentUser={currentUser}
           participant={activeCall.participant}
           type={activeCall.type}
-          isOpen={true}
-          onClose={() => setActiveCall(null)}
+          onEndCall={() => setActiveCall(null)}
         />
       )}
-
-      {/* STATUS STORY VIEWER MODAL */}
-      {selectedStory && (
-        <StatusViewerModal
-          story={selectedStory}
-          onClose={() => setSelectedStory(null)}
-          onReply={(userName, text) => {
-            const contactChat = chats.find((c) => c.participant.displayName === userName);
-            if (contactChat) {
-              setActiveChatId(contactChat.id);
-              handleSendMessage({
-                content: `Replying to status: "${text}"`,
-              });
-            }
-          }}
-        />
-      )}
-
-      {/* LINKED DEVICES MODAL */}
-      <LinkedDevicesModal
-        isOpen={showLinkedDevicesModal}
-        onClose={() => setShowLinkedDevicesModal(false)}
-        currentUser={currentUser}
-      />
     </div>
   );
 };
