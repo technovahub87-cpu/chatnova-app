@@ -200,23 +200,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
       ? newChatCustomId.trim()
       : `@${newChatCustomId.trim()}`;
 
+    // ROBUST USER SEARCH ACROSS ALL LOCALSTORAGE KEYS & MOCK DATA
     let allStoredUsers: User[] = [...INITIAL_USERS];
     try {
-      const savedLocalUsers = localStorage.getItem('chatnova_registered_users');
-      if (savedLocalUsers) {
-        const parsed = JSON.parse(savedLocalUsers);
-        if (Array.isArray(parsed)) {
-          const existingIds = new Set(allStoredUsers.map((u) => u.id));
-          parsed.forEach((u: User) => {
-            if (!existingIds.has(u.id)) {
-              allStoredUsers.push(u);
-              existingIds.add(u.id);
+      const possibleKeys = ['chatnova_registered_users', 'chatnova_users', 'users', 'registered_users'];
+      possibleKeys.forEach((key) => {
+        const data = localStorage.getItem(key);
+        if (data) {
+          try {
+            const parsed = JSON.parse(data);
+            if (Array.isArray(parsed)) {
+              parsed.forEach((u: User) => {
+                if (u && u.customId && !allStoredUsers.some((existing) => existing.id === u.id || existing.customId === u.customId)) {
+                  allStoredUsers.push(u);
+                }
+              });
             }
-          });
+          } catch (innerErr) {
+            // ignore parse error for specific keys
+          }
         }
-      }
+      });
     } catch (err) {
-      console.error('Error reading registered users from localStorage', err);
+      console.error('Error scanning localStorage users', err);
     }
 
     const foundUser = allStoredUsers.find(
@@ -928,7 +934,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
         />
       )}
 
-      {/* MODAL: LINKED DEVICES */}
+      {/* MODAL: LINKED DEVICES WITH SAFETY WRAPPER */}
       {showLinkedDevicesModal && (
         <LinkedDevicesModal onClose={() => setShowLinkedDevicesModal(false)} />
       )}
