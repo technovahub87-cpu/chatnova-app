@@ -178,17 +178,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     })();
   };
 
-  const handleQuickDemo = (demoUser: UserType) => {
-    setCustomId(demoUser.customId);
-    setDisplayName(demoUser.displayName);
-    setPassword('NovaSecurePass2026!');
-    const randomOtp = '882194';
-    setGeneratedOtp(randomOtp);
-    setTimer(60);
-    setOtpDigits(randomOtp.split(''));
-    setStep('otp');
-  };
-
   return (
     <div
       className={`relative min-h-dvh flex items-center justify-center p-4 transition-colors duration-300 overflow-y-auto ${
@@ -427,83 +416,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
                 <ArrowRight className="w-4 h-4" />
               </button>
             </form>
-
-            {/* Quick Demo Logins Section */}
-            <div
-              className={`mt-6 pt-5 border-t ${
-                isDark ? 'border-slate-800' : 'border-slate-200'
-              }`}
-            >
-              <div className="flex items-center justify-between mb-2.5">
-                <span
-                  className={`text-[11px] uppercase tracking-wider font-semibold ${
-                    isDark ? 'text-slate-400' : 'text-slate-500'
-                  }`}
-                >
-                  ⚡ Quick Demo Accounts
-                </span>
-                <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-semibold">
-                  1-click fill
-                </span>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo(INITIAL_USERS[0])}
-                  className={`p-2 rounded-xl text-left transition text-xs flex items-center gap-2 border cursor-pointer ${
-                    isDark
-                      ? 'bg-slate-900 hover:bg-slate-800 border-slate-800'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                  }`}
-                >
-                  <img
-                    src={INITIAL_USERS[0].avatar}
-                    alt=""
-                    className="w-6 h-6 rounded-full object-cover shrink-0"
-                  />
-                  <div className="truncate">
-                    <p
-                      className={`font-semibold truncate text-[11px] ${
-                        isDark ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      Alex Mercer
-                    </p>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-                      @alex_sec
-                    </p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleQuickDemo(INITIAL_USERS[1])}
-                  className={`p-2 rounded-xl text-left transition text-xs flex items-center gap-2 border cursor-pointer ${
-                    isDark
-                      ? 'bg-slate-900 hover:bg-slate-800 border-slate-800'
-                      : 'bg-slate-50 hover:bg-slate-100 border-slate-200'
-                  }`}
-                >
-                  <img
-                    src={INITIAL_USERS[1].avatar}
-                    alt=""
-                    className="w-6 h-6 rounded-full object-cover shrink-0"
-                  />
-                  <div className="truncate">
-                    <p
-                      className={`font-semibold truncate text-[11px] ${
-                        isDark ? 'text-white' : 'text-slate-900'
-                      }`}
-                    >
-                      Elena Rostova
-                    </p>
-                    <p className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono">
-                      @elena_prime
-                    </p>
-                  </div>
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
