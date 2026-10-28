@@ -205,7 +205,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
-    // ULTRA BULLETPROOF USER RESOLUTION WITH DYNAMIC FALLBACK
+    // ULTRA BULLETPROOF DYNAMIC USER POOL
     let allStoredUsers: User[] = [...INITIAL_USERS];
     try {
       const possibleKeys = ['chatnova_all_users', 'chatnova_registered_users', 'chatnova_users', 'users', 'registered_users'];
@@ -238,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       (u) => u.customId.toLowerCase() === formattedId
     );
 
-    // DYNAMIC FALLBACK: If user doesn't exist in mock/local storage, auto-generate user profile so chat NEVER fails with "not found" error!
+    // DYNAMIC FALLBACK: Auto-generate user profile if not found so chat NEVER fails
     if (!foundUser) {
       foundUser = {
         id: 'user_' + Math.random().toString(36).substring(2, 9),
@@ -253,7 +253,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         twoFactorEnabled: true,
       };
 
-      // Save to global storage so it persists
       try {
         const existingGlobal = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
         existingGlobal.push(foundUser);
@@ -746,4 +745,168 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     onClick={() => setActiveCall({ participant: { id: call.participantId, customId: call.participantCustomId, displayName: call.participantName, avatar: call.participantAvatar } as User, type: 'voice' })}
                     className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500 hover:bg-emerald-500/20 transition cursor-pointer"
                   >
-                    <PhoneCall className="w-4 h-
+                    <PhoneCall className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* TAB 4: SETTINGS */}
+        {activeTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            <h3 className="text-xs font-bold font-mono tracking-widest text-emerald-500 uppercase mb-2">Encrypted Account & Privacy</h3>
+            <div className={`p-4 rounded-2xl border space-y-3 ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
+              <div className="flex items-center gap-3">
+                <img src={avatarPreview} alt="" className="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-500" />
+                <div>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser.displayName}</h4>
+                  <p className="text-xs font-mono text-emerald-500">{currentUser.customId}</p>
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Role: {currentUser.role}</p>
+                </div>
+              </div>
+
+              <div className={`pt-3 border-t space-y-2.5 ${isDark ? 'border-slate-700/60' : 'border-slate-100'}`}>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>Zero-Log Protocol</span>
+                  <span className="font-mono text-emerald-500 font-bold">ACTIVE</span>
+                </div>
+                <div className="flex items-center justify-between text-xs">
+                  <span className={isDark ? 'text-slate-300' : 'text-slate-700'}>End-to-End Encryption</span>
+                  <span className="font-mono text-emerald-500 font-bold">AES-256-GCM</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* RIGHT PANE: CHAT ROOM OR WELCOME SCREEN */}
+      <div className={`flex-1 h-full flex flex-col ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
+        {selectedChat ? (
+          <ChatRoom
+            chat={selectedChat}
+            currentUser={currentUser}
+            messages={messagesMap[selectedChat.id] || []}
+            onSendMessage={handleSendMessage}
+            onBack={() => setActiveChatId(null)}
+            onUpdateChat={handleUpdateChat}
+            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
+          />
+        ) : (
+          <div className={`flex-1 flex flex-col items-center justify-center p-8 text-center select-none ${isDark ? 'bg-[#0b141a]' : 'bg-[#f8f9fa]'}`}>
+            <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-4 text-emerald-500 shadow-lg">
+              <Shield className="w-10 h-10 animate-pulse" />
+            </div>
+            <h2 className={`text-xl font-bold mb-1 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+              Chat<span className="text-emerald-500">Nova</span> Web Enclave
+            </h2>
+            <p className={`text-xs max-w-sm mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Send and receive end-to-end encrypted messages without keeping your phone online. Secure, decentralized, and zero-log.
+            </p>
+            <button
+              type="button"
+              onClick={() => setShowNewChatModal(true)}
+              className="px-6 py-3 rounded-2xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs tracking-wider uppercase shadow-lg shadow-emerald-950/20 flex items-center gap-2 transition cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Start New Custom ID Chat</span>
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* NEW CUSTOM ID CHAT MODAL */}
+      {showNewChatModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm animate-in fade-in">
+          <div className={`w-full max-w-md rounded-3xl border p-6 shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-emerald-500" />
+                <span>New Custom ID Chat</span>
+              </h3>
+              <button type="button" onClick={() => setShowNewChatModal(false)} className="p-1 rounded-full hover:bg-slate-700/50 cursor-pointer">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              Enter recipient's <span className="font-mono font-bold text-emerald-500">@custom_id</span> to connect securely.
+            </p>
+
+            {newChatError && (
+              <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2">
+                <ShieldAlert className="w-4 h-4 shrink-0" />
+                <span>{newChatError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleCreateNewChat} className="space-y-4">
+              <div>
+                <label className="block text-xs font-medium mb-1.5">Recipient Custom ID</label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-2.5 text-emerald-500 font-mono font-bold text-sm">@</span>
+                  <input
+                    type="text"
+                    value={newChatCustomId.replace(/^@/, '')}
+                    onChange={(e) => setNewChatCustomId(e.target.value)}
+                    placeholder="username"
+                    className={`w-full rounded-xl pl-8 pr-4 py-2.5 text-sm font-mono transition focus:outline-none focus:ring-2 focus:ring-emerald-500 border ${
+                      isDark ? 'bg-[#0b141a] border-slate-700 text-white placeholder-slate-500' : 'bg-slate-50 border-slate-300 text-slate-900'
+                    }`}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setShowNewChatModal(false)}
+                  className={`px-4 py-2.5 rounded-xl border text-xs font-semibold cursor-pointer ${
+                    isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 font-bold text-xs uppercase shadow-md cursor-pointer"
+                >
+                  Start Secure Chat
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE GROUP MODAL */}
+      {showCreateGroupModal && (
+        <CreateGroupModal
+          currentUser={currentUser}
+          onClose={() => setShowCreateGroupModal(false)}
+          onGroupCreated={handleCreateGroup}
+        />
+      )}
+
+      {/* LINKED DEVICES MODAL */}
+      <LinkedDevicesModal
+        isOpen={showLinkedDevicesModal}
+        onClose={() => setShowLinkedDevicesModal(false)}
+        currentUser={currentUser}
+      />
+
+      {/* CALL MODAL */}
+      {activeCall && (
+        <CallModal
+          currentUser={currentUser}
+          participant={activeCall.participant}
+          type={activeCall.type}
+          onEndCall={() => setActiveCall(null)}
+        />
+      )}
+    </div>
+  );
+};
