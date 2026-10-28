@@ -66,9 +66,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
 
   // FRESH USER EXPERIENCE & PRIVACY:
-  // By default, start with an empty chat list so no random names/chats show up until searched/added via exact @username or group creation.
   const [chats, setChats] = useState<Chat[]>(() => {
-    // If user already has seeded interactions or we want clean fresh state:
     return [];
   });
 
@@ -217,7 +215,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
       ? newChatCustomId.trim()
       : `@${newChatCustomId.trim()}`;
 
-    const foundUser = INITIAL_USERS.find(
+    // FIX: Combine initial hardcoded users and localStorage saved users so dynamically created accounts are found!
+    let allStoredUsers: User[] = [...INITIAL_USERS];
+    try {
+      const savedLocalUsers = localStorage.getItem('chatnova_registered_users');
+      if (savedLocalUsers) {
+        const parsed = JSON.parse(savedLocalUsers);
+        if (Array.isArray(parsed)) {
+          // Merge avoiding duplicates by customId or id
+          const existingIds = new Set(allStoredUsers.map((u) => u.id));
+          parsed.forEach((u: User) => {
+            if (!existingIds.has(u.id)) {
+              allStoredUsers.push(u);
+              existingIds.add(u.id);
+            }
+          });
+        }
+      }
+    } catch (err) {
+      console.error('Error reading registered users from localStorage', err);
+    }
+
+    const foundUser = allStoredUsers.find(
       (u) => u.customId.toLowerCase() === formattedId.toLowerCase()
     );
 
@@ -247,7 +266,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       unreadCount: 0,
       isPinned: false,
       isMuted: false,
-      encryptionFingerprint: foundUser.publicKeyFingerprint,
+      encryptionFingerprint: foundUser.publicKeyFingerprint || generateFingerprint(foundUser.id),
     };
 
     setChats([newChat, ...chats]);
@@ -830,150 +849,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             ))}
           </div>
         )}
-
-        {/* TAB 4: SETTINGS */}
-        {activeTab === 'settings' && (
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            <div className={`p-4 rounded-2xl border ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-white border-slate-200 shadow-sm'}`}>
-              <h3 className="font-bold text-sm mb-1 text-emerald-500">Privacy & Security</h3>
-              <p className="text-xs text-slate-400 mb-3">End-to-end encrypted session active on custom node.</p>
-              <div className="space-y-2 text-xs">
-                <div className="flex justify-between py-1 border-b border-slate-700/50">
-                  <span>Identity Key Fingerprint</span>
-                  <span className="font-mono text-emerald-400">{currentUser.publicKeyFingerprint}</span>
-                </div>
-                <div className="flex justify-between py-1">
-                  <span>Account Role</span>
-                  <span className="font-mono uppercase">{currentUser.role}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
-
-      {/* RIGHT PANE / CHAT ROOM OR WELCOME PLACEHOLDER */}
-      <div className="flex-1 h-full flex flex-col">
-        {selectedChat ? (
-          <ChatRoom
-            currentUser={currentUser}
-            chat={selectedChat}
-            messages={messagesMap[selectedChat.id] || []}
-            onSendMessage={handleSendMessage}
-            onBack={() => setActiveChatId(null)}
-            onUpdateChat={handleUpdateChat}
-            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
-          />
-        ) : (
-          <div className="flex-1 hidden md:flex flex-col items-center justify-center p-8 text-center select-none bg-inherit">
-            <div className="w-20 h-20 rounded-3xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 mb-4 shadow-xl">
-              <Shield className="w-10 h-10" />
-            </div>
-            <h2 className="text-xl font-bold mb-2">ChatNova Secure Enclave</h2>
-            <p className="text-xs text-slate-400 max-w-sm mb-6">
-              Select an encrypted conversation or create a new chat using a contact's unique Custom ID (`@username`) from the menu.
-            </p>
-            <button
-              type="button"
-              onClick={() => setShowNewChatModal(true)}
-              className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition font-mono shadow-lg cursor-pointer flex items-center gap-2"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Start Custom ID Chat</span>
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* NEW CHAT MODAL */}
-      {showNewChatModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-emerald-500" />
-                <span>New Custom ID Chat</span>
-              </h3>
-              <button onClick={() => setShowNewChatModal(false)} className="p-1 rounded-full hover:bg-slate-700/50 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handleCreateNewChat} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Enter Recipient Custom ID</label>
-                <input
-                  type="text"
-                  value={newChatCustomId}
-                  onChange={(e) => setNewChatCustomId(e.target.value)}
-                  placeholder="@username"
-                  className={`w-full px-4 py-2.5 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isDark ? 'bg-[#202c33] border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-                  autoFocus
-                />
-              </div>
-              {newChatError && <p className="text-xs text-rose-500 font-medium">{newChatError}</p>}
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowNewChatModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-700/30 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer">Open Chat</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CREATE GROUP MODAL */}
-      {showCreateGroupModal && (
-        <CreateGroupModal
-          currentUser={currentUser}
-          onClose={() => setShowCreateGroupModal(false)}
-          onCreateGroup={handleCreateGroup}
-        />
-      )}
-
-      {/* LINKED DEVICES MODAL */}
-      {showLinkedDevicesModal && (
-        <LinkedDevicesModal onClose={() => setShowLinkedDevicesModal(false)} />
-      )}
-
-      {/* NEW STATUS MODAL */}
-      {showNewStatusModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-3xl p-6 border shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-base font-bold flex items-center gap-2">
-                <CircleDot className="w-5 h-5 text-emerald-500" />
-                <span>Post Encrypted Status</span>
-              </h3>
-              <button onClick={() => setShowNewStatusModal(false)} className="p-1 rounded-full hover:bg-slate-700/50 cursor-pointer">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form onSubmit={handlePostStatus} className="space-y-4">
-              <textarea
-                value={newStatusText}
-                onChange={(e) => setNewStatusText(e.target.value)}
-                placeholder="Type your status story..."
-                rows={3}
-                className={`w-full px-4 py-2.5 rounded-xl text-xs border focus:outline-none focus:ring-1 focus:ring-emerald-500 ${isDark ? 'bg-[#202c33] border-slate-700 text-white' : 'bg-slate-50 border-slate-200 text-slate-900'}`}
-                autoFocus
-              />
-              <div className="flex justify-end gap-2 pt-2">
-                <button type="button" onClick={() => setShowNewStatusModal(false)} className="px-4 py-2 rounded-xl text-xs font-semibold hover:bg-slate-700/30 cursor-pointer">Cancel</button>
-                <button type="submit" className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold cursor-pointer">Post Status</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CALL MODAL */}
-      {activeCall && (
-        <CallModal
-          currentUser={currentUser}
-          participant={activeCall.participant}
-          type={activeCall.type}
-          onEndCall={() => setActiveCall(null)}
-        />
-      )}
     </div>
   );
 };
