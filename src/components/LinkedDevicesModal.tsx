@@ -43,10 +43,12 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 }) => {
   const { isDark } = useTheme();
 
+  const currentUserId = currentUser?.id || 'guest_user';
+
   // Devices state
   const [devices, setDevices] = useState<LinkedDevice[]>(() => {
     try {
-      const saved = localStorage.getItem(`chatnova_linked_devices_${currentUser.id}`);
+      const saved = localStorage.getItem(`chatnova_linked_devices_${currentUserId}`);
       if (saved) {
         return JSON.parse(saved);
       }
@@ -78,9 +80,9 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
   // Save devices in localStorage safely
   useEffect(() => {
     try {
-      localStorage.setItem(`chatnova_linked_devices_${currentUser.id}`, JSON.stringify(devices));
+      localStorage.setItem(`chatnova_linked_devices_${currentUserId}`, JSON.stringify(devices));
     } catch (e) {}
-  }, [devices, currentUser.id]);
+  }, [devices, currentUserId]);
 
   // QR token refresh countdown
   useEffect(() => {
@@ -173,8 +175,8 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 
       try {
         wsService.emit('device:linked', {
-          userId: currentUser.id,
-          customId: currentUser.customId,
+          userId: currentUserId,
+          customId: currentUser?.customId || '@user',
           device: newDevice,
         });
       } catch (e) {}
@@ -196,7 +198,7 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 
     try {
       wsService.emit('device:unlinked', {
-        userId: currentUser.id,
+        userId: currentUserId,
         deviceId,
         revokedAt: new Date().toISOString(),
       });
@@ -212,7 +214,7 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 
     try {
       wsService.emit('device:unlinked_all', {
-        userId: currentUser.id,
+        userId: currentUserId,
         revokedAt: new Date().toISOString(),
       });
     } catch (e) {}
@@ -380,42 +382,45 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                 </div>
 
                 <div className="space-y-2.5">
-                  {devices.map((device) => (
-                    <div
-                      key={device.id}
-                      className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between group ${
-                        isDark
-                          ? 'bg-[#17242c] hover:bg-[#1d2d37] border-slate-800'
-                          : 'bg-white hover:bg-slate-50 border-slate-200 shadow-xs'
-                      }`}
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0">
-                        <div
-                          className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${
-                            isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-100 border-slate-200'
-                          }`}
-                        >
-                          {getDeviceIcon(device.type)}
-                        </div>
-                        <div className="min-w-0">
-                          <h5 className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                            {device.name}
-                          </h5>
-                          <p className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
-                            {device.browser ? `${device.browser} • ` : ''} {device.location}
-                          </p>
-                        </div>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => handleLogoutDevice(device.id)}
-                        className="px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 shrink-0 ml-2"
+                  {devices.map((device) => {
+                    if (!device) return null;
+                    return (
+                      <div
+                        key={device.id}
+                        className={`p-3.5 rounded-2xl border transition-all flex items-center justify-between group ${
+                          isDark
+                            ? 'bg-[#17242c] hover:bg-[#1d2d37] border-slate-800'
+                            : 'bg-white hover:bg-slate-50 border-slate-200 shadow-xs'
+                        }`}
                       >
-                        Log Out
-                      </button>
-                    </div>
-                  ))}
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div
+                            className={`w-11 h-11 rounded-2xl border flex items-center justify-center shrink-0 ${
+                              isDark ? 'bg-slate-800/80 border-slate-700' : 'bg-slate-100 border-slate-200'
+                            }`}
+                          >
+                            {getDeviceIcon(device.type)}
+                          </div>
+                          <div className="min-w-0">
+                            <h5 className={`font-bold text-xs truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                              {device.name}
+                            </h5>
+                            <p className={`text-[11px] truncate mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>
+                              {device.browser ? `${device.browser} • ` : ''} {device.location}
+                            </p>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleLogoutDevice(device.id)}
+                          className="px-3 py-1.5 rounded-xl text-xs font-semibold transition cursor-pointer text-rose-500 hover:bg-rose-500/10 border border-transparent hover:border-rose-500/30 shrink-0 ml-2"
+                        >
+                          Log Out
+                        </button>
+                      </div>
+                    );
+                  })}
 
                   {devices.length === 0 && (
                     <div className={`p-8 text-center text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
