@@ -17,7 +17,7 @@ import { generateFingerprint } from '../services/crypto';
 
 interface CreateGroupModalProps {
   isOpen: boolean;
-  currentUser: User;
+  currentUser?: User | null;
   onClose: () => void;
   onCreateGroup: (newGroupChat: Chat) => void;
 }
@@ -44,18 +44,19 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
 
-  if (!isOpen) return null;
+  if (!isOpen || !currentUser) return null;
 
   // Candidate members (exclude current user)
   const candidateUsers = INITIAL_USERS.filter(
-    (u) => u.id !== currentUser.id && !u.isBanned
+    (u) => u && u.id !== currentUser.id && !u.isBanned
   ).filter(
     (u) =>
-      u.displayName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      u.customId.toLowerCase().includes(searchQuery.toLowerCase())
+      (u.displayName && u.displayName.toLowerCase().includes(searchQuery.toLowerCase())) ||
+      (u.customId && u.customId.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
   const toggleSelectUser = (id: string) => {
+    if (!id) return;
     if (selectedUserIds.includes(id)) {
       setSelectedUserIds(selectedUserIds.filter((item) => item !== id));
     } else {
@@ -79,15 +80,16 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
       return;
     }
 
-    const selectedMembers = INITIAL_USERS.filter((u) => selectedUserIds.includes(u.id));
+    const selectedMembers = INITIAL_USERS.filter((u) => u && selectedUserIds.includes(u.id));
     const allMembers = [currentUser, ...selectedMembers];
+    const cleanGroupName = groupName.trim();
 
     const newGroupChat: Chat = {
       id: 'group_' + Date.now(),
       participant: {
         id: 'group_root',
-        customId: `@group_${groupName.trim().toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-        displayName: groupName.trim(),
+        customId: `@group_${cleanGroupName.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+        displayName: cleanGroupName,
         avatar: selectedIcon,
         bio: groupDescription.trim() || 'Encrypted group channel',
         status: 'online',
@@ -98,7 +100,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         createdAt: new Date().toISOString(),
       },
       isGroup: true,
-      groupName: groupName.trim(),
+      groupName: cleanGroupName,
       groupIcon: selectedIcon,
       groupAdminId: currentUser.id,
       groupDescription: groupDescription.trim() || 'ChatNova End-to-End Encrypted Group Session',
@@ -113,7 +115,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
         senderId: currentUser.id,
         senderName: currentUser.displayName,
         type: 'system',
-        content: `You created group "${groupName.trim()}" with ${allMembers.length} members. 256-bit Group Ratchet is active.`,
+        content: `You created group "${cleanGroupName}" with ${allMembers.length} members. 256-bit Group Ratchet is active.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'read',
       },
@@ -200,7 +202,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
             {selectedUserIds.length > 0 && (
               <div className="flex flex-wrap gap-1.5 py-1">
                 {selectedUserIds.map((id) => {
-                  const u = INITIAL_USERS.find((x) => x.id === id);
+                  const u = INITIAL_USERS.find((x) => x && x.id === id);
                   if (!u) return null;
                   return (
                     <span
@@ -228,6 +230,7 @@ export const CreateGroupModal: React.FC<CreateGroupModalProps> = ({
               }`}
             >
               {candidateUsers.map((user) => {
+                if (!user) return null;
                 const isSelected = selectedUserIds.includes(user.id);
                 return (
                   <div
