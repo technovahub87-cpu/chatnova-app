@@ -14,7 +14,10 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const savedUser = localStorage.getItem('chatnova_current_user');
-      if (savedUser) return JSON.parse(savedUser);
+      if (savedUser) {
+        const parsed = JSON.parse(savedUser);
+        if (parsed && parsed.id) return parsed;
+      }
     } catch (e) {}
     return null;
   });
@@ -56,8 +59,11 @@ function AppContent() {
       ];
 
       defaultPool.forEach((defUser) => {
-        if (!existingUsers.some((u: any) => u.customId.toLowerCase() === defUser.customId.toLowerCase())) {
-          existingUsers.push(defUser);
+        if (defUser && defUser.customId) {
+          const exists = existingUsers.some((u: any) => u && u.customId && u.customId.toLowerCase() === defUser.customId.toLowerCase());
+          if (!exists) {
+            existingUsers.push(defUser);
+          }
         }
       });
 
@@ -78,6 +84,7 @@ function AppContent() {
   }, []);
 
   const handleLoginSuccess = (user: User) => {
+    if (!user || !user.id) return;
     setCurrentUser(user);
     try {
       localStorage.setItem('chatnova_current_user', JSON.stringify(user));
@@ -115,16 +122,18 @@ function AppContent() {
         />
       )}
 
-      {!showSplash && currentUser && (
+      {!showSplash && currentUser && currentUser.id && (
         <Dashboard
           currentUser={currentUser}
           onLogout={handleLogout}
           onOpenMasterAdmin={() => setShowMasterAdmin(true)}
           onUpdateUser={(updated) => {
-            setCurrentUser(updated);
-            try {
-              localStorage.setItem('chatnova_current_user', JSON.stringify(updated));
-            } catch (e) {}
+            if (updated && updated.id) {
+              setCurrentUser(updated);
+              try {
+                localStorage.setItem('chatnova_current_user', JSON.stringify(updated));
+              } catch (e) {}
+            }
           }}
         />
       )}
