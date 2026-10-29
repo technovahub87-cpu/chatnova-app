@@ -1,7 +1,7 @@
 /**
  * Offshore WebSocket & Socket.io Real-time Client
  * Integrates directly with Node.js backend running Socket.io,
- * with seamless zero-downtime offline fallback simulation.
+ * with clean zero-fake-reply communication.
  */
 import { io as socketIO, Socket } from 'socket.io-client';
 import { getAuthToken } from './api';
@@ -31,7 +31,7 @@ class WebSocketClient {
       url: this.socketUrl,
       gateway: this.isLiveBackend
         ? 'Live Offshore Node.js Relay'
-        : 'Zurich Offshore Relay Enclave (Simulated & Local)',
+        : 'Local Secure Enclave (Simulation Mode - No Bot Replies)',
       latencyMs: this.isLiveBackend ? 11 : 14,
     };
   }
@@ -102,10 +102,9 @@ class WebSocketClient {
         });
 
         this.socket.on('connect_error', () => {
-          // Live server not reachable -> Fall back to local enclave simulation
           this.isLiveBackend = false;
           this.isConnected = true;
-          console.log('[ChatNova Socket.io] Live backend not detected. Operating in zero-log enclave simulation mode.');
+          console.log('[ChatNova Socket.io] Live backend not detected. Operating in clean local mode (No automated bot replies).');
           this.emit('connection:open', { url: this.socketUrl, isLive: false });
           resolve(true);
         });
@@ -158,89 +157,24 @@ class WebSocketClient {
   }
 
   /**
-   * Send payload via live Socket.io or trigger local simulation
+   * Send payload via live Socket.io (Automated bot replies completely removed)
    */
   public send(event: string, payload: any) {
     if (this.isLiveBackend && this.socket && this.socket.connected) {
-      // Emit to live Node.js / Socket.io server
       this.socket.emit(event, payload);
     } else {
-      // Local fallback simulation (for standalone mode / local testing)
-      this.simulateRemoteResponse(event, payload);
-    }
-  }
-
-  private simulateRemoteResponse(event: string, payload: any) {
-    if (event === 'chat:send_message') {
-      const message = payload.message;
-
-      // Single tick -> Delivered tick after 600ms
-      setTimeout(() => {
-        this.emit('chat:message_status', {
-          messageId: message.id,
-          status: 'delivered',
-        });
-      }, 600);
-
-      // Delivered tick -> Read blue tick after 1200ms
-      setTimeout(() => {
-        this.emit('chat:message_status', {
-          messageId: message.id,
-          status: 'read',
-        });
-      }, 1200);
-
-      // If it's a 1-on-1 chat or group chat, simulate contacts replying
-      const isGroup = Boolean(payload.isGroup);
-      const groupName = payload.groupName;
-
-      setTimeout(() => {
-        const replyingName = isGroup
-          ? payload.groupMembers?.[1]?.displayName || 'Elena Rostova'
-          : payload.recipientName || 'Elena Rostova';
-
-        this.emit('chat:typing', {
-          chatId: payload.chatId,
-          isTyping: true,
-          senderName: replyingName,
-        });
-
-        setTimeout(() => {
-          this.emit('chat:typing', {
-            chatId: payload.chatId,
-            isTyping: false,
-          });
-
-          const directReplies = [
-            'Understood. Verified through our Zurich enclave. Safe to proceed.',
-            'Got your transmission! 256-bit key exchange hash verified 🔒',
-            'All clean here. The offshore zero-log gateway confirmed the payload.',
-            'Affirmative. Perfect privacy protocol adherence.',
-          ];
-
-          const groupReplies = [
-            `Acknowledged by group ${groupName || 'Squad'}. Ratchet keys synced 🛡️`,
-            'All members online in this secure enclave. Standing by.',
-            'Group transmission integrity verified. End-to-end verified across all nodes.',
-          ];
-
-          const replyPool = isGroup ? groupReplies : directReplies;
-          const text = replyPool[Math.floor(Math.random() * replyPool.length)];
-
-          const autoReply = {
-            id: 'msg_' + Date.now(),
-            chatId: payload.chatId,
-            senderId: isGroup ? 'user_elena' : payload.recipientId || 'user_elena',
-            senderName: replyingName,
-            type: 'text',
-            content: text,
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'read',
-          };
-
-          this.emit('chat:new_message', autoReply);
-        }, 1800);
-      }, 1400);
+      // Local mode: Just update message status to delivered, NO FAKE BOT REPLIES
+      if (event === 'chat:send_message') {
+        const message = payload.message;
+        if (message) {
+          setTimeout(() => {
+            this.emit('chat:message_status', {
+              messageId: message.id,
+              status: 'delivered',
+            });
+          }, 500);
+        }
+      }
     }
   }
 }
