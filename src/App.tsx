@@ -32,12 +32,14 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    wsService.connect();
+    try {
+      wsService.connect();
+    } catch (e) {}
 
     try {
       const existingUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
       const defaultPool = [
-        ...INITIAL_USERS,
+        ...(Array.isArray(INITIAL_USERS) ? INITIAL_USERS : []),
         {
           id: 'user_1',
           customId: '@narendra_56',
@@ -71,11 +73,13 @@ function AppContent() {
     } catch (err) {}
 
     const checkHashRoute = () => {
-      const path = window.location.pathname;
-      const hash = window.location.hash;
-      if (path.includes('master-admin') || hash.includes('master-admin')) {
-        setShowMasterAdmin(true);
-      }
+      try {
+        const path = window.location.pathname || '';
+        const hash = window.location.hash || '';
+        if (path.includes('master-admin') || hash.includes('master-admin')) {
+          setShowMasterAdmin(true);
+        }
+      } catch (e) {}
     };
 
     checkHashRoute();
@@ -102,6 +106,9 @@ function AppContent() {
   const handleBanUserUpdate = (userId: string, isBanned: boolean) => {
     if (currentUser && currentUser.id === userId && isBanned) {
       setCurrentUser(null);
+      try {
+        localStorage.removeItem('chatnova_current_user');
+      } catch (e) {}
     }
   };
 
@@ -143,9 +150,11 @@ function AppContent() {
         currentUser={currentUser}
         onClose={() => {
           setShowMasterAdmin(false);
-          if (window.location.hash.includes('master-admin')) {
-            window.location.hash = '';
-          }
+          try {
+            if (window.location.hash.includes('master-admin')) {
+              window.location.hash = '';
+            }
+          } catch (e) {}
         }}
         onBanUserUpdate={handleBanUserUpdate}
       />
