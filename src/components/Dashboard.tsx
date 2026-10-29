@@ -71,7 +71,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string>(currentUser.avatar);
+  const [avatarPreview, setAvatarPreview] = useState<string>(currentUser?.avatar || '');
 
   const [calls, setCalls] = useState<CallLog[]>(INITIAL_CALLS);
   const [activeCall, setActiveCall] = useState<{
@@ -110,6 +110,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
   useEffect(() => {
     const unsubMsg = wsService.on('chat:new_message', (newMsg: Message) => {
+      if (!newMsg || !newMsg.chatId) return;
       setMessagesMap((prev) => {
         const currentList = prev[newMsg.chatId] || [];
         return {
@@ -124,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             return {
               ...c,
               lastMessage: newMsg,
-              unreadCount: activeChatId === newMsg.chatId ? 0 : c.unreadCount + 1,
+              unreadCount: activeChatId === newMsg.chatId ? 0 : (c.unreadCount || 0) + 1,
             };
           }
           return c;
@@ -133,6 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     const unsubStatus = wsService.on('chat:message_status', (data: any) => {
+      if (!data || !data.messageId) return;
       setMessagesMap((prev) => {
         const updated = { ...prev };
         Object.keys(updated).forEach((cId) => {
@@ -145,8 +147,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
 
     const unsubBroadcast = wsService.on('admin:broadcast', (data: any) => {
-      setBroadcastNotice(data.message);
-      setTimeout(() => setBroadcastNotice(null), 7000);
+      if (data && data.message) {
+        setBroadcastNotice(data.message);
+        setTimeout(() => setBroadcastNotice(null), 7000);
+      }
     });
 
     return () => {
@@ -162,8 +166,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const fullMsg: Message = {
       id: 'msg_' + Date.now(),
       chatId: activeChatId,
-      senderId: currentUser.id,
-      senderName: currentUser.displayName,
+      senderId: currentUser?.id || 'usr_me',
+      senderName: currentUser?.displayName || 'User',
       type: msgData.type || 'text',
       content: msgData.content || '',
       timestamp: msgData.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -184,8 +188,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const currentChat = chats.find((c) => c.id === activeChatId);
     wsService.send('chat:send_message', {
       chatId: activeChatId,
-      recipientId: currentChat?.participant.id,
-      recipientName: currentChat?.participant.displayName,
+      recipientId: currentChat?.participant?.id,
+      recipientName: currentChat?.participant?.displayName,
       isGroup: currentChat?.isGroup,
       groupName: currentChat?.groupName,
       groupMembers: currentChat?.groupMembers,
@@ -199,7 +203,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     const rawInput = newChatCustomId.trim().toLowerCase();
     const formattedId = rawInput.startsWith('@') ? rawInput : `@${rawInput}`;
 
-    if (formattedId === currentUser.customId.toLowerCase()) {
+    if (currentUser?.customId && formattedId === currentUser.customId.toLowerCase()) {
       setNewChatError('You cannot start a chat with yourself.');
       return;
     }
@@ -243,7 +247,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
       } catch (e) {}
     }
 
-    const existing = chats.find((c) => !c.isGroup && c.participant.id === foundUser!.id);
+    const existing = chats.find((c) => !c.isGroup && c.participant?.id === foundUser!.id);
     if (existing) {
       setActiveChatId(existing.id);
       setShowNewChatModal(false);
@@ -292,8 +296,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const filteredChats = chats.filter((c) => {
-    const title = c.isGroup ? c.groupName : c.participant.displayName;
-    const subtitle = c.isGroup ? c.groupMembers?.map((m) => m.displayName).join(' ') : c.participant.customId;
+    const title = c.isGroup ? c.groupName : c.participant?.displayName;
+    const subtitle = c.isGroup ? c.groupMembers?.map((m) => m.displayName).join(' ') : c.participant?.customId;
     const lastContent = c.lastMessage?.content || '';
 
     return (
@@ -348,7 +352,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Change Profile Photo">
               <img
                 src={avatarPreview}
-                alt={currentUser.displayName}
+                alt={currentUser?.displayName || 'User'}
                 className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/50"
               />
               <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
@@ -375,7 +379,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <div className="flex items-center gap-1.5 relative">
             <ThemeToggle />
 
-            {currentUser.role === 'master_admin' && (
+            {currentUser?.role === 'master_admin' && (
               <button
                 type="button"
                 onClick={onOpenMasterAdmin}
@@ -494,7 +498,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
           >
             <div className="relative">
               <MessageSquare className="w-4 h-4" />
-              {chats.some((c) => c.unreadCount > 0) && (
+              {chats.some((c) => (c.unreadCount || 0) > 0) && (
                 <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-emerald-500" />
               )}
             </div>
@@ -565,7 +569,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             {filteredChats.map((chat) => {
               const isActive = chat.id === activeChatId;
               const lastMsg = chat.lastMessage;
-              const isSentByMe = lastMsg?.senderId === currentUser.id;
+              const isSentByMe = lastMsg?.senderId === currentUser?.id;
 
               return (
                 <div
@@ -582,15 +586,15 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 >
                   <div className="relative shrink-0">
                     <img
-                      src={chat.groupIcon || chat.participant.avatar}
-                      alt={chat.groupName || chat.participant.displayName}
+                      src={chat.groupIcon || chat.participant?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+                      alt={chat.groupName || chat.participant?.displayName || 'Chat'}
                       className={`w-12 h-12 rounded-full object-cover ring-1 ${isDark ? 'ring-slate-700' : 'ring-slate-200'}`}
                     />
                     {chat.isGroup ? (
                       <span className="absolute bottom-0 right-0 w-4 h-4 rounded-full bg-emerald-600 border-2 border-white dark:border-[#111b21] flex items-center justify-center text-white">
                         <Users className="w-2.5 h-2.5" />
                       </span>
-                    ) : chat.participant.status === 'online' ? (
+                    ) : chat.participant?.status === 'online' ? (
                       <span className="absolute bottom-0 right-0 w-3 h-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#111b21]" />
                     ) : null}
                   </div>
@@ -599,7 +603,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     <div className="flex items-center justify-between mb-1">
                       <div className="flex items-center gap-1.5 truncate">
                         <span className={`font-semibold text-sm truncate ${isDark ? 'text-white' : 'text-slate-900'}`}>
-                          {chat.isGroup ? chat.groupName : chat.participant.displayName}
+                          {chat.isGroup ? chat.groupName : (chat.participant?.displayName || 'Unknown')}
                         </span>
                         {chat.isGroup ? (
                           <span className="px-1.5 py-0.2 rounded bg-emerald-500/15 text-[9.5px] text-emerald-600 dark:text-emerald-400 font-mono font-bold shrink-0">
@@ -607,7 +611,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                           </span>
                         ) : (
                           <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-mono font-bold shrink-0">
-                            {chat.participant.customId}
+                            {chat.participant?.customId}
                           </span>
                         )}
                       </div>
@@ -642,7 +646,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </span>
                       </div>
 
-                      {chat.unreadCount > 0 && (
+                      {(chat.unreadCount || 0) > 0 && (
                         <span className="ml-2 px-1.5 py-0.5 rounded-full bg-emerald-500 text-white dark:text-slate-950 font-bold text-[10px] shrink-0 font-mono">
                           {chat.unreadCount}
                         </span>
@@ -728,9 +732,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
               <div className="flex items-center gap-3">
                 <img src={avatarPreview} alt="" className="w-14 h-14 rounded-2xl object-cover ring-2 ring-emerald-500" />
                 <div>
-                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser.displayName}</h4>
-                  <p className="text-xs font-mono text-emerald-500">{currentUser.customId}</p>
-                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Role: {currentUser.role}</p>
+                  <h4 className={`font-bold text-sm ${isDark ? 'text-white' : 'text-slate-900'}`}>{currentUser?.displayName}</h4>
+                  <p className="text-xs font-mono text-emerald-500">{currentUser?.customId}</p>
+                  <p className={`text-[10px] mt-0.5 ${isDark ? 'text-slate-400' : 'text-slate-500'}`}>Role: {currentUser?.role}</p>
                 </div>
               </div>
 
@@ -751,7 +755,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
       {/* RIGHT PANE: CHAT ROOM OR WELCOME SCREEN */}
       <div className={`flex-1 h-full flex flex-col ${!activeChatId ? 'hidden md:flex' : 'flex'}`}>
-        {selectedChat ? (
+        {selectedChat && selectedChat.participant ? (
           <ChatRoom
             chat={selectedChat}
             currentUser={currentUser}
@@ -905,8 +909,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   if (!newStatusText.trim()) return;
                   const newStory: StatusStory = {
                     id: 'status_' + Date.now(),
-                    userId: currentUser.id,
-                    userName: currentUser.displayName,
+                    userId: currentUser?.id || 'usr_me',
+                    userName: currentUser?.displayName || 'User',
                     userAvatar: avatarPreview,
                     content: newStatusText.trim(),
                     timestamp: 'Just now',
