@@ -1,7 +1,7 @@
 const User = require('../models/User');
 const Message = require('../models/Message');
 
-// In-memory mapping of active users: userId -> socketId and socketId -> userId
+// In-memory mapping of active users
 const onlineUsers = new Map(); // userId -> { socketId, customId }
 const socketToUser = new Map(); // socketId -> userId
 
@@ -11,14 +11,12 @@ const initSocket = (io) => {
 
     /**
      * 1. IDENTITY REGISTRATION / ONLINE PRESENCE
-     * Client emits 'auth:init' with customId and userId upon establishing socket
      */
     socket.on('auth:init', async (data) => {
       try {
-        const { userId, customId } = data;
+        const { userId, customId } = data || {};
         if (!userId) return;
 
-        // Check if user is banned
         const user = await User.findById(userId);
         if (!user || user.isBanned) {
           socket.emit('auth:error', { message: 'Identity banned or invalid.' });
@@ -26,20 +24,16 @@ const initSocket = (io) => {
           return;
         }
 
-        // Store mapping
         onlineUsers.set(userId, { socketId: socket.id, customId });
         socketToUser.set(socket.id, userId);
 
-        // Update database presence
         user.status = 'online';
         user.currentSocketId = socket.id;
         user.lastSeen = new Date();
         await user.save();
 
-        // Join personal room for targeted alerts
         socket.join(`user:${userId}`);
 
-        // Broadcast presence to all connected clients
         io.emit('user:presence_update', {
           userId,
           customId: user.customId,
@@ -49,7 +43,7 @@ const initSocket = (io) => {
 
         console.log(`[Socket.io] Identity online: ${user.customId} (${socket.id})`);
 
-        // Check for any undelivered messages sent to this user while offline
+        // Deliver undelivered messages
         const undeliveredMessages = await Message.find({
           recipient: userId,
           status: 'sent',
@@ -61,10 +55,8 @@ const initSocket = (io) => {
             msg.deliveredAt = new Date();
             await msg.save();
 
-            // Emit to recipient
             socket.emit('chat:new_message', msg);
 
-            // Notify original sender that message is now delivered (double grey tick!)
             const senderPresence = onlineUsers.get(msg.sender.toString());
             if (senderPresence) {
               io.to(senderPresence.socketId).emit('chat:message_status', {
@@ -81,14 +73,24 @@ const initSocket = (io) => {
     });
 
     /**
-     * 2. REAL-TIME MESSAGE TRANSMISSION
-     * Handles text, voice note waveforms, and encrypted media attachments
+     * 2. REAL-TIME MESSAGE TRANSMISSION (Fixed payload extraction)
      */
     socket.on('chat:send_message', async (data) => {
       try {
-        const { chatId, recipientId, senderId, content, type, voice, media } = data;
+        // Handle both nested message object and flat properties seamlessly
+        const chatId = data?.chatId || data?.message?.chatId;
+        const recipientId = data?.recipientId || data?.message?.recipientId;
+        const senderId = data?.senderId || data?.message?.senderId;
+        const content = data?.content || data?.message?.content;
+        const type = data?.type || data?.message?.type || 'text';
+        const voice = data?.voice || data?.message?.voice;
+        const media = data?.media || data?.message?.media;
+        const tempId = data?.tempId || data?.message?.tempId;
 
-        if (!chatId || !content || !senderId) return;
+        if (!chatId || !content || !senderId) {
+          console.warn('[Socket] Missing required fields in chat:send_message:', data);
+          return;
+        }
 
         const sender = await User.findById(senderId);
         if (!sender || sender.isBanned) {
@@ -101,7 +103,7 @@ const initSocket = (io) => {
           recipient = await User.findById(recipientId);
         }
 
-        // 1. Create and persist message in MongoDB
+        // Persist message in MongoDB
         const newMessage = await Message.create({
           chatId,
           sender: sender._id,
@@ -109,34 +111,31 @@ const initSocket = (io) => {
           senderName: sender.displayName,
           recipient: recipient ? recipient._id : null,
           recipientCustomId: recipient ? recipient.customId : null,
-          type: type || 'text',
+          type,
           content,
-          status: 'sent', // Initial single tick
+          status: 'sent',
           voice: voice || null,
           media: media || null,
         });
 
-        // Acknowledge sender that message is stored on relay (Single tick confirmed)
+        // Acknowledge sender
         socket.emit('chat:message_acknowledged', {
-          tempId: data.tempId,
+          tempId: tempId,
           message: newMessage,
           status: 'sent',
         });
 
-        // 2. Check if recipient is actively online
+        // Deliver to recipient if online
         if (recipient) {
           const recipientPresence = onlineUsers.get(recipient._id.toString());
 
           if (recipientPresence) {
-            // Deliver immediately via WebSocket
             io.to(recipientPresence.socketId).emit('chat:new_message', newMessage);
 
-            // Update database status to 'delivered'
             newMessage.status = 'delivered';
             newMessage.deliveredAt = new Date();
             await newMessage.save();
 
-            // Notify sender immediately: First double tick!
             socket.emit('chat:message_status', {
               messageId: newMessage._id,
               chatId,
@@ -144,7 +143,6 @@ const initSocket = (io) => {
             });
           }
         } else {
-          // Group or channel broadcast
           socket.to(`chat:${chatId}`).emit('chat:new_message', newMessage);
         }
       } catch (err) {
@@ -153,14 +151,13 @@ const initSocket = (io) => {
     });
 
     /**
-     * 3. DOUBLE-TICK READ RECEIPT HANDLER ('read' blue ticks)
+     * 3. READ RECEIPT HANDLER
      */
     socket.on('chat:mark_read', async (data) => {
       try {
-        const { chatId, messageIds, readerId } = data;
+        const { chatId, messageIds, readerId } = data || {};
         if (!chatId || !readerId) return;
 
-        // Update database: mark messages as 'read'
         const filter = { chatId, status: { $ne: 'read' } };
         if (messageIds && messageIds.length > 0) {
           filter._id = { $in: messageIds };
@@ -171,11 +168,10 @@ const initSocket = (io) => {
           readAt: new Date(),
         });
 
-        // Broadcast to chat room participants (or specific sender)
         io.emit('chat:read_receipt', {
           chatId,
           readerId,
-          status: 'read', // Double blue tick!
+          status: 'read',
         });
       } catch (err) {
         console.error('[Socket chat:mark_read error]:', err);
@@ -183,10 +179,10 @@ const initSocket = (io) => {
     });
 
     /**
-     * 4. REAL-TIME TYPING INDICATORS
+     * 4. TYPING INDICATORS
      */
     socket.on('chat:typing', (data) => {
-      const { chatId, recipientId, isTyping, senderCustomId } = data;
+      const { chatId, recipientId, isTyping, senderCustomId } = data || {};
       if (recipientId) {
         const recipientPresence = onlineUsers.get(recipientId);
         if (recipientPresence) {
@@ -206,18 +202,18 @@ const initSocket = (io) => {
     });
 
     /**
-     * 5. JOIN / LEAVE CHAT ROOMS
+     * 5. JOIN / LEAVE ROOMS
      */
     socket.on('chat:join', (chatId) => {
-      socket.join(`chat:${chatId}`);
+      if (chatId) socket.join(`chat:${chatId}`);
     });
 
     socket.on('chat:leave', (chatId) => {
-      socket.leave(`chat:${chatId}`);
+      if (chatId) socket.leave(`chat:${chatId}`);
     });
 
     /**
-     * 6. DISCONNECTION & PRESENCE CLEANUP
+     * 6. DISCONNECTION & CLEANUP
      */
     socket.on('disconnect', async () => {
       const userId = socketToUser.get(socket.id);
@@ -233,7 +229,6 @@ const initSocket = (io) => {
             user.currentSocketId = null;
             await user.save();
 
-            // Broadcast offline status
             io.emit('user:presence_update', {
               userId,
               customId: user.customId,
