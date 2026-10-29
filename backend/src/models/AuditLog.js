@@ -5,19 +5,23 @@ const AuditLogSchema = new mongoose.Schema(
     action: {
       type: String,
       required: true,
+      trim: true,
       index: true,
     },
     targetUser: {
       type: String,
       required: true,
+      trim: true,
     },
     actor: {
       type: String,
       default: 'SYSTEM',
+      trim: true,
     },
     ipAddress: {
       type: String,
       default: '127.0.0.1',
+      trim: true,
     },
     severity: {
       type: String,
@@ -27,6 +31,7 @@ const AuditLogSchema = new mongoose.Schema(
     details: {
       type: String,
       default: '',
+      trim: true,
     },
   },
   {
@@ -34,4 +39,4 @@ const AuditLogSchema = new mongoose.Schema(
   }
 );
 
-module.exports = mongoose.model('AuditLog', AuditLogSchema);
+module.exports = mongoose.models.AuditLog || mongoose.model('AuditLog', AuditLogSchema);
