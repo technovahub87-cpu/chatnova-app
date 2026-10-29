@@ -456,6 +456,469 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     setActiveTab('settings');
                     setShowHeaderMenu(false);
                   }}
+                  import React, { useState, useRef, useEffect } from 'react';
+import {
+  Shield,
+  Lock,
+  Search,
+  MessageSquare,
+  CircleDot,
+  Phone,
+  Settings,
+  MoreVertical,
+  Check,
+  CheckCheck,
+  Plus,
+  PhoneCall,
+  Video,
+  ExternalLink,
+  ShieldAlert,
+  Key,
+  Eye,
+  LogOut,
+  Sliders,
+  Bell,
+  Trash2,
+  FileText,
+  UserPlus,
+  Users,
+  X,
+  Sparkles,
+  Laptop,
+  QrCode,
+  ChevronRight,
+  Camera
+} from 'lucide-react';
+import { User, Chat, Message, CallLog, StatusStory } from '../types';
+import {
+  INITIAL_CHATS,
+  INITIAL_MESSAGES,
+  INITIAL_CALLS,
+  INITIAL_STATUSES,
+  INITIAL_USERS,
+} from '../data/mockData';
+import { ChatRoom } from './ChatRoom';
+import { CallModal } from './CallModal';
+import { StatusViewerModal } from './StatusViewerModal';
+import { CreateGroupModal } from './CreateGroupModal';
+import { LinkedDevicesModal } from './LinkedDevicesModal';
+import { wsService } from '../services/websocket';
+import { useTheme } from '../context/ThemeContext';
+import { ThemeToggle } from './ThemeToggle';
+import { generateFingerprint } from '../services/crypto';
+
+interface DashboardProps {
+  currentUser: User;
+  onLogout: () => void;
+  onOpenMasterAdmin: () => void;
+  onUpdateUser?: (updatedUser: User) => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({
+  currentUser,
+  onLogout,
+  onOpenMasterAdmin,
+  onUpdateUser,
+}) => {
+  const { isDark } = useTheme();
+  const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
+
+  const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
+  const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>(INITIAL_MESSAGES);
+  const [activeChatId, setActiveChatId] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>(currentUser?.avatar || '');
+
+  const [calls, setCalls] = useState<CallLog[]>(INITIAL_CALLS);
+  const [activeCall, setActiveCall] = useState<{
+    participant: User;
+    type: 'voice' | 'video';
+  } | null>(null);
+
+  const [statuses, setStatuses] = useState<StatusStory[]>(INITIAL_STATUSES);
+  const [newStatusText, setNewStatusText] = useState('');
+  const [showNewStatusModal, setShowNewStatusModal] = useState(false);
+
+  const [showNewChatModal, setShowNewChatModal] = useState(false);
+  const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+  const [newChatCustomId, setNewChatCustomId] = useState('');
+  const [newChatError, setNewChatError] = useState('');
+
+  const [showHeaderMenu, setShowHeaderMenu] = useState(false);
+  const [showLinkedDevicesModal, setShowLinkedDevicesModal] = useState(false);
+  const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const base64String = reader.result as string;
+        setAvatarPreview(base64String);
+        const updatedUser: User = { ...currentUser, avatar: base64String };
+        if (onUpdateUser) {
+          onUpdateUser(updatedUser);
+        }
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  useEffect(() => {
+    const unsubMsg = wsService.on('chat:new_message', (newMsg: Message) => {
+      if (!newMsg || !newMsg.chatId) return;
+      setMessagesMap((prev) => {
+        const currentList = prev[newMsg.chatId] || [];
+        // Avoid duplicate messages if already present
+        if (currentList.some((m) => m.id === newMsg.id)) return prev;
+        return {
+          ...prev,
+          [newMsg.chatId]: [...currentList, newMsg],
+        };
+      });
+
+      setChats((prev) =>
+        prev.map((c) => {
+          if (c.id === newMsg.chatId) {
+            return {
+              ...c,
+              lastMessage: newMsg,
+              unreadCount: activeChatId === newMsg.chatId ? 0 : (c.unreadCount || 0) + 1,
+            };
+          }
+          return c;
+        })
+      );
+    });
+
+    const unsubStatus = wsService.on('chat:message_status', (data: any) => {
+      if (!data || !data.messageId) return;
+      setMessagesMap((prev) => {
+        const updated = { ...prev };
+        Object.keys(updated).forEach((cId) => {
+          updated[cId] = updated[cId].map((m) =>
+            m.id === data.messageId ? { ...m, status: data.status } : m
+          );
+        });
+        return updated;
+      });
+    });
+
+    const unsubBroadcast = wsService.on('admin:broadcast', (data: any) => {
+      if (data && data.message) {
+        setBroadcastNotice(data.message);
+        setTimeout(() => setBroadcastNotice(null), 7000);
+      }
+    });
+
+    return () => {
+      unsubMsg();
+      unsubStatus();
+      unsubBroadcast();
+    };
+  }, [activeChatId]);
+
+  const handleSendMessage = (msgData: Partial<Message>) => {
+    if (!activeChatId) return;
+
+    const fullMsg: Message = {
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      chatId: activeChatId,
+      senderId: currentUser?.id || 'usr_me',
+      senderName: currentUser?.displayName || 'User',
+      type: msgData.type || 'text',
+      content: msgData.content || '',
+      timestamp: msgData.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      status: 'sending',
+      voice: msgData.voice,
+      media: msgData.media,
+    };
+
+    setMessagesMap((prev) => ({
+      ...prev,
+      [activeChatId]: [...(prev[activeChatId] || []), fullMsg],
+    }));
+
+    setChats((prev) =>
+      prev.map((c) => (c.id === activeChatId ? { ...c, lastMessage: fullMsg } : c))
+    );
+
+    const currentChat = chats.find((c) => c.id === activeChatId);
+    wsService.send('chat:send_message', {
+      chatId: activeChatId,
+      recipientId: currentChat?.participant?.id,
+      recipientName: currentChat?.participant?.displayName,
+      isGroup: currentChat?.isGroup,
+      groupName: currentChat?.groupName,
+      groupMembers: currentChat?.groupMembers,
+      message: fullMsg,
+    });
+  };
+
+  const handleCreateNewChat = (e: React.FormEvent) => {
+    e.preventDefault();
+    setNewChatError('');
+    const rawInput = newChatCustomId.trim().toLowerCase();
+    const formattedId = rawInput.startsWith('@') ? rawInput : `@${rawInput}`;
+
+    if (currentUser?.customId && formattedId === currentUser.customId.toLowerCase()) {
+      setNewChatError('You cannot start a chat with yourself.');
+      return;
+    }
+
+    let allStoredUsers: User[] = [...INITIAL_USERS];
+    try {
+      const savedUsersJson = localStorage.getItem('chatnova_all_users');
+      if (savedUsersJson) {
+        const parsed = JSON.parse(savedUsersJson);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((u: any) => {
+            if (u && u.customId && !allStoredUsers.some((ex) => ex.customId.toLowerCase() === u.customId.toLowerCase())) {
+              allStoredUsers.push(u);
+            }
+          });
+        }
+      }
+    } catch (err) {}
+
+    let foundUser = allStoredUsers.find(
+      (u) => u.customId.toLowerCase() === formattedId
+    );
+
+    if (!foundUser) {
+      foundUser = {
+        id: 'user_' + Math.random().toString(36).substring(2, 9),
+        customId: formattedId,
+        displayName: formattedId.replace('@', '').toUpperCase(),
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+        bio: 'ChatNova Secure Enclave User',
+        status: 'online',
+        lastSeen: 'Online',
+        publicKeyFingerprint: generateFingerprint(),
+        role: 'user',
+        twoFactorEnabled: true,
+      };
+
+      try {
+        allStoredUsers.push(foundUser);
+        localStorage.setItem('chatnova_all_users', JSON.stringify(allStoredUsers));
+      } catch (e) {}
+    }
+
+    // Deterministic sorted chatId so both users get the exact same ID
+    const deterministicChatId = [currentUser.id, foundUser.id].sort().join('_');
+
+    const existing = chats.find((c) => !c.isGroup && c.id === deterministicChatId);
+    if (existing) {
+      setActiveChatId(existing.id);
+      setShowNewChatModal(false);
+      setNewChatCustomId('');
+      setActiveTab('chats');
+      return;
+    }
+
+    const newChat: Chat = {
+      id: deterministicChatId,
+      participant: foundUser,
+      isGroup: false,
+      unreadCount: 0,
+      isPinned: false,
+      isMuted: false,
+      encryptionFingerprint: foundUser.publicKeyFingerprint || generateFingerprint(foundUser.id),
+    };
+
+    setChats([newChat, ...chats]);
+    setActiveChatId(newChat.id);
+    setShowNewChatModal(false);
+    setNewChatCustomId('');
+    setActiveTab('chats');
+  };
+
+  const handleCreateGroup = (newGroupChat: Chat) => {
+    setChats([newGroupChat, ...chats]);
+    setActiveChatId(newGroupChat.id);
+    if (newGroupChat.lastMessage) {
+      setMessagesMap((prev) => ({
+        ...prev,
+        [newGroupChat.id]: [newGroupChat.lastMessage!],
+      }));
+    }
+    setActiveTab('chats');
+  };
+
+  const handleUpdateChat = (updatedChat: Chat) => {
+    setChats((prev) => prev.map((c) => (c.id === updatedChat.id ? updatedChat : c)));
+    if (updatedChat.lastMessage) {
+      setMessagesMap((prev) => ({
+        ...prev,
+        [updatedChat.id]: [...(prev[updatedChat.id] || []), updatedChat.lastMessage!],
+      }));
+    }
+  };
+
+  const filteredChats = chats.filter((c) => {
+    const title = c.isGroup ? c.groupName : c.participant?.displayName;
+    const subtitle = c.isGroup ? c.groupMembers?.map((m) => m.displayName).join(' ') : c.participant?.customId;
+    const lastContent = c.lastMessage?.content || '';
+
+    return (
+      (title || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (subtitle || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+      lastContent.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+  });
+
+  const selectedChat = chats.find((c) => c.id === activeChatId);
+
+  return (
+    <div
+      className={`relative h-dvh w-dvw flex overflow-hidden font-sans transition-colors duration-300 ${
+        isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#f0f2f5] text-slate-900'
+      }`}
+    >
+      {broadcastNotice && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 px-4 py-2.5 rounded-2xl bg-amber-500 text-slate-950 font-semibold text-xs shadow-2xl flex items-center gap-2 animate-bounce">
+          <ShieldAlert className="w-4 h-4 shrink-0" />
+          <span>MASTER ANNOUNCEMENT: {broadcastNotice}</span>
+        </div>
+      )}
+
+      {/* LEFT PANE */}
+      <div
+        className={`w-full md:w-[380px] lg:w-[420px] h-full flex flex-col border-r shrink-0 transition-colors duration-200 ${
+          isDark ? 'bg-[#111b21] border-slate-800' : 'bg-[#ffffff] border-slate-200 shadow-sm'
+        } ${activeChatId ? 'hidden md:flex' : 'flex'}`}
+      >
+        <div
+          className={`px-4 py-3 flex items-center justify-between border-b select-none transition-colors duration-200 ${
+            isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
+          }`}
+        >
+          <div
+            className="flex items-center gap-2.5 cursor-pointer select-none"
+            onClick={() => {
+              (window as any).__chatnova_logo_taps = ((window as any).__chatnova_logo_taps || 0) + 1;
+              clearTimeout((window as any).__chatnova_logo_timer);
+              if ((window as any).__chatnova_logo_taps >= 5) {
+                (window as any).__chatnova_logo_taps = 0;
+                onOpenMasterAdmin();
+              } else {
+                (window as any).__chatnova_logo_timer = setTimeout(() => {
+                  (window as any).__chatnova_logo_taps = 0;
+                }, 2200);
+              }
+            }}
+            title="ChatNova Enclave"
+          >
+            <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()} title="Change Profile Photo">
+              <img
+                src={avatarPreview}
+                alt={currentUser?.displayName || 'User'}
+                className="w-9 h-9 rounded-xl object-cover ring-2 ring-emerald-500/50"
+              />
+              <div className="absolute inset-0 bg-black/40 rounded-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                <Camera className="w-4 h-4 text-white" />
+              </div>
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleAvatarChange}
+                accept="image/*"
+                className="hidden"
+              />
+            </div>
+            <div>
+              <h1 className={`text-lg font-bold leading-tight flex items-center gap-1.5 ${isDark ? 'text-white' : 'text-slate-900'}`}>
+                Chat<span className="text-emerald-500 font-extrabold">Nova</span>
+              </h1>
+              <p className="text-[9px] font-mono tracking-widest text-emerald-600 dark:text-emerald-400 font-bold uppercase">
+                Your Privacy • Our Priority
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1.5 relative">
+            <ThemeToggle />
+
+            {currentUser?.role === 'master_admin' && (
+              <button
+                type="button"
+                onClick={onOpenMasterAdmin}
+                title="Master Admin Console"
+                className={`p-2 rounded-full transition cursor-pointer ${
+                  isDark ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60' : 'text-emerald-700 hover:text-emerald-800 hover:bg-slate-200/80'
+                }`}
+              >
+                <ShieldAlert className="w-5 h-5" />
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={() => setShowHeaderMenu(!showHeaderMenu)}
+              className={`p-2 rounded-full transition cursor-pointer ${
+                isDark ? 'text-slate-300 hover:text-white hover:bg-slate-700/60' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200/80'
+              }`}
+            >
+              <MoreVertical className="w-5 h-5" />
+            </button>
+
+            {showHeaderMenu && (
+              <div
+                className={`absolute right-0 top-11 z-40 w-52 rounded-2xl border shadow-2xl py-1 text-xs transition-colors duration-150 ${
+                  isDark ? 'bg-[#233138] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800 shadow-xl'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateGroupModal(true);
+                    setShowHeaderMenu(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 transition cursor-pointer ${
+                    isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
+                  }`}
+                >
+                  <Users className="w-4 h-4 text-emerald-500" />
+                  <span className="font-semibold">New Encrypted Group</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowNewChatModal(true);
+                    setShowHeaderMenu(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 transition cursor-pointer ${
+                    isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
+                  }`}
+                >
+                  <UserPlus className="w-4 h-4 text-emerald-500" />
+                  <span>New Custom ID Chat</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowLinkedDevicesModal(true);
+                    setShowHeaderMenu(false);
+                  }}
+                  className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 transition cursor-pointer ${
+                    isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
+                  }`}
+                >
+                  <Laptop className="w-4 h-4 text-emerald-500" />
+                  <span className="font-semibold">Linked Devices</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setActiveTab('settings');
+                    setShowHeaderMenu(false);
+                  }}
                   className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 transition cursor-pointer ${
                     isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
                   }`}
