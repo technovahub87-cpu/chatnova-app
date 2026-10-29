@@ -12,7 +12,6 @@ function AppContent() {
   const { isDark } = useTheme();
   const [showSplash, setShowSplash] = useState(true);
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
-    // Persistent session recovery so page refresh doesn't wipe login
     try {
       const savedUser = localStorage.getItem('chatnova_current_user');
       if (savedUser) return JSON.parse(savedUser);
@@ -21,11 +20,17 @@ function AppContent() {
   });
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
 
-  // Initialize offshore WebSocket service & Default User Directory on launch
+  // Safety fallback: Force hide splash after 3.5 seconds if callback fails
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3500);
+    return () => clearTimeout(timer);
+  }, []);
+
   useEffect(() => {
     wsService.connect();
 
-    // 1. Ensure default mock users and local registry are always populated so search never fails
     try {
       const existingUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
       const defaultPool = [
@@ -59,7 +64,6 @@ function AppContent() {
       localStorage.setItem('chatnova_all_users', JSON.stringify(existingUsers));
     } catch (err) {}
 
-    // Check if URL has /master-admin or #master-admin
     const checkHashRoute = () => {
       const path = window.location.pathname;
       const hash = window.location.hash;
@@ -100,12 +104,10 @@ function AppContent() {
         isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#f0f2f5] text-slate-900'
       }`}
     >
-      {/* 1. Animated Splash & Loading Handshake Screen */}
       {showSplash && (
         <SplashScreen onComplete={() => setShowSplash(false)} />
       )}
 
-      {/* 2. Custom ID & Password Login / Register with 2FA / OTP */}
       {!showSplash && !currentUser && (
         <AuthScreen
           onLoginSuccess={handleLoginSuccess}
@@ -113,7 +115,6 @@ function AppContent() {
         />
       )}
 
-      {/* 3. Main WhatsApp-Style Encrypted Dashboard */}
       {!showSplash && currentUser && (
         <Dashboard
           currentUser={currentUser}
@@ -128,7 +129,6 @@ function AppContent() {
         />
       )}
 
-      {/* 4. Master Admin Panel (Hidden/Protected Route /master-admin with Strict RBAC) */}
       <MasterAdminPanel
         isOpen={showMasterAdmin}
         currentUser={currentUser}
