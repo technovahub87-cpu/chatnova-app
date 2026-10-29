@@ -5,6 +5,7 @@ const MessageSchema = new mongoose.Schema(
     chatId: {
       type: String,
       required: true,
+      trim: true,
       index: true,
     },
     sender: {
@@ -15,10 +16,12 @@ const MessageSchema = new mongoose.Schema(
     senderCustomId: {
       type: String,
       required: true,
+      trim: true,
     },
     senderName: {
       type: String,
       required: true,
+      trim: true,
     },
     recipient: {
       type: mongoose.Schema.Types.ObjectId,
@@ -26,6 +29,7 @@ const MessageSchema = new mongoose.Schema(
     },
     recipientCustomId: {
       type: String,
+      trim: true,
     },
     type: {
       type: String,
@@ -43,16 +47,16 @@ const MessageSchema = new mongoose.Schema(
       index: true,
     },
     voice: {
-      duration: Number,
-      waveform: [Number],
-      audioUrl: String,
+      duration: { type: Number, default: 0 },
+      waveform: { type: [Number], default: [] },
+      audioUrl: { type: String, trim: true },
     },
     media: {
-      type: { type: String },
-      url: String,
-      name: String,
-      size: String,
-      encryptedHash: String,
+      type: { type: String, trim: true },
+      url: { type: String, trim: true },
+      name: { type: String, trim: true },
+      size: { type: String, trim: true },
+      encryptedHash: { type: String, trim: true },
     },
     reactions: {
       type: Map,
@@ -74,4 +78,4 @@ const MessageSchema = new mongoose.Schema(
 // Compound index for fast timeline queries
 MessageSchema.index({ chatId: 1, createdAt: -1 });
 
-module.exports = mongoose.model('Message', MessageSchema);
+module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);
