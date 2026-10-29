@@ -13,11 +13,15 @@ const generateToken = (id) => {
 
 // Helper to generate Curve25519 style fingerprint
 const generateFingerprint = () => {
-  const parts = [];
-  for (let i = 0; i < 6; i++) {
-    parts.push(Math.floor(1000 + Math.random() * 9000).toString());
+  try {
+    const parts = [];
+    for (let i = 0; i < 6; i++) {
+      parts.push(Math.floor(1000 + Math.random() * 9000).toString());
+    }
+    return parts.join(' ');
+  } catch (e) {
+    return '1234 5678 9012 3456 7890 1234';
   }
-  return parts.join(' ');
 };
 
 // @desc    Register new Custom ID identity
@@ -79,10 +83,11 @@ exports.register = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[Auth Register Error]:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Auth Register Error]:', errorMsg);
     return res.status(500).json({
       success: false,
-      message: error.message || 'Server error while generating identity.',
+      message: errorMsg || 'Server error while generating identity.',
     });
   }
 };
@@ -155,7 +160,8 @@ exports.login = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error('[Auth Login Error]:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Auth Login Error]:', errorMsg);
     return res.status(500).json({
       success: false,
       message: 'Server error during authentication.',
@@ -167,8 +173,12 @@ exports.login = async (req, res) => {
 // @route   GET /api/auth/me
 // @access  Private
 exports.getMe = async (req, res) => {
-  return res.status(200).json({
-    success: true,
-    user: req.user,
-  });
+  try {
+    return res.status(200).json({
+      success: true,
+      user: req.user,
+    });
+  } catch (error) {
+    return res.status(500).json({ success: false, message: 'Server error retrieving profile.' });
+  }
 };
