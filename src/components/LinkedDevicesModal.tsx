@@ -45,14 +45,12 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
 
   // Devices state
   const [devices, setDevices] = useState<LinkedDevice[]>(() => {
-    const saved = localStorage.getItem(`chatnova_linked_devices_${currentUser.id}`);
-    if (saved) {
-      try {
+    try {
+      const saved = localStorage.getItem(`chatnova_linked_devices_${currentUser.id}`);
+      if (saved) {
         return JSON.parse(saved);
-      } catch (e) {
-        return INITIAL_LINKED_DEVICES;
       }
-    }
+    } catch (e) {}
     return INITIAL_LINKED_DEVICES;
   });
 
@@ -77,9 +75,11 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
   // Sync animation toast
   const [syncNotice, setSyncNotice] = useState<string | null>(null);
 
-  // Save devices in localStorage
+  // Save devices in localStorage safely
   useEffect(() => {
-    localStorage.setItem(`chatnova_linked_devices_${currentUser.id}`, JSON.stringify(devices));
+    try {
+      localStorage.setItem(`chatnova_linked_devices_${currentUser.id}`, JSON.stringify(devices));
+    } catch (e) {}
   }, [devices, currentUser.id]);
 
   // QR token refresh countdown
@@ -171,11 +171,13 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
       setIsPairing(false);
       setPairingSuccessDevice(newDevice.name);
 
-      wsService.emit('device:linked', {
-        userId: currentUser.id,
-        customId: currentUser.customId,
-        device: newDevice,
-      });
+      try {
+        wsService.emit('device:linked', {
+          userId: currentUser.id,
+          customId: currentUser.customId,
+          device: newDevice,
+        });
+      } catch (e) {}
 
       setSyncNotice(`Device paired! Synchronizing 50 recent encrypted chats via multi-device ratchet.`);
       setTimeout(() => setSyncNotice(null), 4500);
@@ -192,11 +194,13 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
     setDevices((prev) => prev.filter((d) => d.id !== deviceId));
     setSelectedDeviceToLogout(null);
 
-    wsService.emit('device:unlinked', {
-      userId: currentUser.id,
-      deviceId,
-      revokedAt: new Date().toISOString(),
-    });
+    try {
+      wsService.emit('device:unlinked', {
+        userId: currentUser.id,
+        deviceId,
+        revokedAt: new Date().toISOString(),
+      });
+    } catch (e) {}
 
     setSyncNotice(`Session terminated. Keys revoked for ${target?.name || 'device'}.`);
     setTimeout(() => setSyncNotice(null), 3500);
@@ -206,10 +210,12 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
     setDevices([]);
     setShowLogoutAllConfirm(false);
 
-    wsService.emit('device:unlinked_all', {
-      userId: currentUser.id,
-      revokedAt: new Date().toISOString(),
-    });
+    try {
+      wsService.emit('device:unlinked_all', {
+        userId: currentUser.id,
+        revokedAt: new Date().toISOString(),
+      });
+    } catch (e) {}
 
     setSyncNotice('All companion sessions forcefully terminated and cryptographic ratchets revoked.');
     setTimeout(() => setSyncNotice(null), 4000);
@@ -362,6 +368,15 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                   <h4 className="text-[11px] uppercase tracking-wider font-mono font-bold text-emerald-600 dark:text-emerald-400">
                     Device Status ({devices.length} Active)
                   </h4>
+                  {devices.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowLogoutAllConfirm(true)}
+                      className="text-[11px] text-rose-500 hover:underline font-semibold cursor-pointer"
+                    >
+                      Log out all devices
+                    </button>
+                  )}
                 </div>
 
                 <div className="space-y-2.5">
@@ -401,6 +416,12 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                       </button>
                     </div>
                   ))}
+
+                  {devices.length === 0 && (
+                    <div className={`p-8 text-center text-xs ${isDark ? 'text-slate-500' : 'text-slate-400'}`}>
+                      No linked companion devices active right now.
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -455,6 +476,10 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
                     </div>
                   </div>
                 </div>
+                <div className="mt-3 text-center">
+                  <p className="text-[11px] font-mono text-slate-500">Token ID: {qrToken}</p>
+                  <p className="text-[10px] font-mono font-bold text-emerald-600">Refreshes in {qrTimer}s</p>
+                </div>
               </div>
               <button
                 type="button"
@@ -467,6 +492,37 @@ export const LinkedDevicesModal: React.FC<LinkedDevicesModalProps> = ({
           )}
         </div>
       </div>
+
+      {/* LOGOUT ALL CONFIRMATION MODAL */}
+      {showLogoutAllConfirm && (
+        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+          <div className={`w-full max-w-sm rounded-3xl border p-6 shadow-2xl ${isDark ? 'bg-[#111b21] border-slate-800 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <h3 className="text-base font-bold mb-2 flex items-center gap-2 text-rose-500">
+              <AlertTriangle className="w-5 h-5" />
+              <span>Log out all companion sessions?</span>
+            </h3>
+            <p className={`text-xs mb-6 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
+              This will revoke encryption keys and disconnect all active laptops, web browsers, and tablets linked to your account.
+            </p>
+            <div className="flex items-center justify-end gap-2.5">
+              <button
+                type="button"
+                onClick={() => setShowLogoutAllConfirm(false)}
+                className={`px-4 py-2 rounded-xl border text-xs font-semibold ${isDark ? 'border-slate-700 text-slate-300 hover:bg-slate-800' : 'border-slate-300 text-slate-700 hover:bg-slate-100'}`}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleLogoutAllDevices}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold uppercase shadow-md"
+              >
+                Confirm Log Out All
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
