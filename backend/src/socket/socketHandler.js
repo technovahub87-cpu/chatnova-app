@@ -26,15 +26,16 @@ const initSocket = (io) => {
           return;
         }
 
-        onlineUsers.set(userId, { socketId: socket.id, customId });
-        socketToUser.set(socket.id, userId);
+        onlineUsers.set(userId.toString(), { socketId: socket.id, customId });
+        socketToUser.set(socket.id, userId.toString());
 
         user.status = 'online';
         user.currentSocketId = socket.id;
         user.lastSeen = new Date();
         await user.save();
 
-        socket.join(`user:${userId}`);
+        // Join personal user room for direct targeted delivery
+        socket.join(`user:${userId.toString()}`);
 
         io.emit('user:presence_update', {
           userId,
@@ -60,9 +61,8 @@ const initSocket = (io) => {
             socket.emit('chat:new_message', msg);
 
             const senderIdStr = msg.sender ? msg.sender.toString() : '';
-            const senderPresence = onlineUsers.get(senderIdStr);
-            if (senderPresence) {
-              io.to(senderPresence.socketId).emit('chat:message_status', {
+            if (senderIdStr) {
+              io.to(`user:${senderIdStr}`).emit('chat:message_status', {
                 messageId: msg._id,
                 chatId: msg.chatId,
                 status: 'delivered',
@@ -77,11 +77,10 @@ const initSocket = (io) => {
     });
 
     /**
-     * 2. REAL-TIME MESSAGE TRANSMISSION (Fixed payload extraction)
+     * 2. REAL-TIME MESSAGE TRANSMISSION (Robust Direct & Room Delivery)
      */
     socket.on('chat:send_message', async (data) => {
       try {
-        // Handle both nested message object and flat properties seamlessly
         const chatId = data?.chatId || data?.message?.chatId;
         const recipientId = data?.recipientId || data?.message?.recipientId;
         const senderId = data?.senderId || data?.message?.senderId;
@@ -129,26 +128,24 @@ const initSocket = (io) => {
           status: 'sent',
         });
 
-        // Deliver to recipient if online
+        // Deliver to recipient via personal user room (`user:${recipientId}`)
         if (recipient) {
-          const recipientPresence = onlineUsers.get(recipient._id.toString());
+          const recipientIdStr = recipient._id.toString();
+          io.to(`user:${recipientIdStr}`).emit('chat:new_message', newMessage);
 
-          if (recipientPresence) {
-            io.to(recipientPresence.socketId).emit('chat:new_message', newMessage);
+          newMessage.status = 'delivered';
+          newMessage.deliveredAt = new Date();
+          await newMessage.save();
 
-            newMessage.status = 'delivered';
-            newMessage.deliveredAt = new Date();
-            await newMessage.save();
-
-            socket.emit('chat:message_status', {
-              messageId: newMessage._id,
-              chatId,
-              status: 'delivered',
-            });
-          }
-        } else {
-          socket.to(`chat:${chatId}`).emit('chat:new_message', newMessage);
+          socket.emit('chat:message_status', {
+            messageId: newMessage._id,
+            chatId,
+            status: 'delivered',
+          });
         }
+
+        // Also broadcast to any active socket room listeners
+        socket.to(`chat:${chatId}`).emit('chat:new_message', newMessage);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error('[Socket chat:send_message error]:', errorMsg);
@@ -191,14 +188,11 @@ const initSocket = (io) => {
       try {
         const { chatId, recipientId, isTyping, senderCustomId } = data || {};
         if (recipientId) {
-          const recipientPresence = onlineUsers.get(recipientId);
-          if (recipientPresence) {
-            io.to(recipientPresence.socketId).emit('chat:typing', {
-              chatId,
-              isTyping,
-              senderCustomId,
-            });
-          }
+          io.to(`user:${recipientId.toString()}`).emit('chat:typing', {
+            chatId,
+            isTyping,
+            senderCustomId,
+          });
         } else if (chatId) {
           socket.to(`chat:${chatId}`).emit('chat:typing', {
             chatId,
