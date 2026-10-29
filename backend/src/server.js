@@ -27,7 +27,7 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 app.use(
   cors({
-    origin: corsOrigin === '*' ? true : corsOrigin.split(','),
+    origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((o) => o.trim()),
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     credentials: true,
   })
@@ -52,7 +52,7 @@ app.use('/api/', apiLimiter);
 // 4. Initialize Socket.io Server with CORS
 const io = new Server(server, {
   cors: {
-    origin: corsOrigin === '*' ? true : corsOrigin.split(','),
+    origin: corsOrigin === '*' ? true : corsOrigin.split(',').map((o) => o.trim()),
     methods: ['GET', 'POST'],
     credentials: true,
   },
@@ -86,10 +86,11 @@ app.use((req, res) => {
 });
 
 app.use((err, req, res, next) => {
-  console.error('[Unhandled Global Error]:', err);
+  const errorMsg = err instanceof Error ? err.message : String(err);
+  console.error('[Unhandled Global Error]:', errorMsg);
   res.status(err.status || 500).json({
     success: false,
-    message: err.message || 'Internal cryptographic server error.',
+    message: errorMsg || 'Internal cryptographic server error.',
   });
 });
 
