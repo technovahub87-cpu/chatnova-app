@@ -6,6 +6,8 @@ const onlineUsers = new Map(); // userId -> { socketId, customId }
 const socketToUser = new Map(); // socketId -> userId
 
 const initSocket = (io) => {
+  if (!io) return;
+
   io.on('connection', (socket) => {
     console.log(`[Socket.io] New client connected: ${socket.id}`);
 
@@ -49,7 +51,7 @@ const initSocket = (io) => {
           status: 'sent',
         });
 
-        if (undeliveredMessages.length > 0) {
+        if (Array.isArray(undeliveredMessages) && undeliveredMessages.length > 0) {
           for (const msg of undeliveredMessages) {
             msg.status = 'delivered';
             msg.deliveredAt = new Date();
@@ -57,7 +59,8 @@ const initSocket = (io) => {
 
             socket.emit('chat:new_message', msg);
 
-            const senderPresence = onlineUsers.get(msg.sender.toString());
+            const senderIdStr = msg.sender ? msg.sender.toString() : '';
+            const senderPresence = onlineUsers.get(senderIdStr);
             if (senderPresence) {
               io.to(senderPresence.socketId).emit('chat:message_status', {
                 messageId: msg._id,
@@ -68,7 +71,8 @@ const initSocket = (io) => {
           }
         }
       } catch (err) {
-        console.error('[Socket auth:init error]:', err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Socket auth:init error]:', errorMsg);
       }
     });
 
@@ -146,7 +150,8 @@ const initSocket = (io) => {
           socket.to(`chat:${chatId}`).emit('chat:new_message', newMessage);
         }
       } catch (err) {
-        console.error('[Socket chat:send_message error]:', err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Socket chat:send_message error]:', errorMsg);
       }
     });
 
@@ -159,7 +164,7 @@ const initSocket = (io) => {
         if (!chatId || !readerId) return;
 
         const filter = { chatId, status: { $ne: 'read' } };
-        if (messageIds && messageIds.length > 0) {
+        if (Array.isArray(messageIds) && messageIds.length > 0) {
           filter._id = { $in: messageIds };
         }
 
@@ -174,7 +179,8 @@ const initSocket = (io) => {
           status: 'read',
         });
       } catch (err) {
-        console.error('[Socket chat:mark_read error]:', err);
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error('[Socket chat:mark_read error]:', errorMsg);
       }
     });
 
@@ -182,46 +188,48 @@ const initSocket = (io) => {
      * 4. TYPING INDICATORS
      */
     socket.on('chat:typing', (data) => {
-      const { chatId, recipientId, isTyping, senderCustomId } = data || {};
-      if (recipientId) {
-        const recipientPresence = onlineUsers.get(recipientId);
-        if (recipientPresence) {
-          io.to(recipientPresence.socketId).emit('chat:typing', {
+      try {
+        const { chatId, recipientId, isTyping, senderCustomId } = data || {};
+        if (recipientId) {
+          const recipientPresence = onlineUsers.get(recipientId);
+          if (recipientPresence) {
+            io.to(recipientPresence.socketId).emit('chat:typing', {
+              chatId,
+              isTyping,
+              senderCustomId,
+            });
+          }
+        } else if (chatId) {
+          socket.to(`chat:${chatId}`).emit('chat:typing', {
             chatId,
             isTyping,
             senderCustomId,
           });
         }
-      } else if (chatId) {
-        socket.to(`chat:${chatId}`).emit('chat:typing', {
-          chatId,
-          isTyping,
-          senderCustomId,
-        });
-      }
+      } catch (e) {}
     });
 
     /**
      * 5. JOIN / LEAVE ROOMS
      */
     socket.on('chat:join', (chatId) => {
-      if (chatId) socket.join(`chat:${chatId}`);
+      if (chatId && typeof chatId === 'string') socket.join(`chat:${chatId}`);
     });
 
     socket.on('chat:leave', (chatId) => {
-      if (chatId) socket.leave(`chat:${chatId}`);
+      if (chatId && typeof chatId === 'string') socket.leave(`chat:${chatId}`);
     });
 
     /**
      * 6. DISCONNECTION & CLEANUP
      */
     socket.on('disconnect', async () => {
-      const userId = socketToUser.get(socket.id);
-      if (userId) {
-        onlineUsers.delete(userId);
-        socketToUser.delete(socket.id);
+      try {
+        const userId = socketToUser.get(socket.id);
+        if (userId) {
+          onlineUsers.delete(userId);
+          socketToUser.delete(socket.id);
 
-        try {
           const user = await User.findById(userId);
           if (user) {
             user.status = 'offline';
@@ -236,9 +244,10 @@ const initSocket = (io) => {
               lastSeen: user.lastSeen.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             });
           }
-        } catch (e) {
-          console.error('[Socket disconnect update error]:', e);
         }
+      } catch (e) {
+        const errorMsg = e instanceof Error ? e.message : String(e);
+        console.error('[Socket disconnect update error]:', errorMsg);
       }
       console.log(`[Socket.io] Client disconnected: ${socket.id}`);
     });
