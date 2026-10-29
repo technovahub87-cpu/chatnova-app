@@ -19,8 +19,8 @@ import { useTheme } from '../context/ThemeContext';
 import { INITIAL_USERS } from '../data/mockData';
 
 interface GroupInfoModalProps {
-  chat: Chat;
-  currentUser: User;
+  chat?: Chat | null;
+  currentUser?: User | null;
   isOpen: boolean;
   onClose: () => void;
   onAddMember?: (newMember: User) => void;
@@ -36,23 +36,27 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
   onLeaveGroup,
 }) => {
   const { isDark } = useTheme();
-  const [isMuted, setIsMuted] = useState(chat.isMuted || false);
+  const [isMuted, setIsMuted] = useState(chat?.isMuted || false);
   const [showAddMember, setShowAddMember] = useState(false);
   const [copiedFingerprint, setCopiedFingerprint] = useState(false);
 
-  if (!isOpen || !chat.isGroup) return null;
+  if (!isOpen || !chat || !chat.isGroup) return null;
 
-  const members = chat.groupMembers || [currentUser];
-  const groupAdminId = chat.groupAdminId || currentUser.id;
+  const currentUserId = currentUser?.id || 'guest_id';
+  const members = chat.groupMembers || (currentUser ? [currentUser] : []);
+  const groupAdminId = chat.groupAdminId || currentUserId;
+  const encryptionFingerprint = chat.encryptionFingerprint || 'E2EE-GROUP-FP-0000';
 
   const availableToAdd = INITIAL_USERS.filter(
-    (u) => !members.some((m) => m.id === u.id) && !u.isBanned
+    (u) => u && !members.some((m) => m && m.id === u.id) && !u.isBanned
   );
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText(chat.encryptionFingerprint);
-    setCopiedFingerprint(true);
-    setTimeout(() => setCopiedFingerprint(false), 2000);
+    try {
+      navigator.clipboard?.writeText(encryptionFingerprint);
+      setCopiedFingerprint(true);
+      setTimeout(() => setCopiedFingerprint(false), 2000);
+    } catch (e) {}
   };
 
   return (
@@ -94,8 +98,8 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
           <div className="flex flex-col items-center text-center">
             <div className="relative mb-3">
               <img
-                src={chat.groupIcon || chat.participant.avatar}
-                alt={chat.groupName}
+                src={chat.groupIcon || chat.participant?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+                alt={chat.groupName || 'Group'}
                 className="w-20 h-20 rounded-2xl object-cover ring-4 ring-emerald-500/40 shadow-lg"
               />
               <div className="absolute -bottom-1 -right-1 w-6 h-6 rounded-full bg-emerald-600 text-white flex items-center justify-center shadow">
@@ -103,7 +107,7 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
               </div>
             </div>
 
-            <h2 className="text-lg font-bold leading-tight">{chat.groupName}</h2>
+            <h2 className="text-lg font-bold leading-tight">{chat.groupName || 'Encrypted Group'}</h2>
             <p className="text-xs font-mono text-emerald-600 dark:text-emerald-400 font-semibold mt-0.5">
               Group • {members.length} Participants
             </p>
@@ -174,7 +178,7 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
               All transmissions in this group are protected by decentralized post-quantum sender keys. Only authorized members have decryption privileges.
             </p>
             <p className="text-[10px] font-mono text-emerald-600 dark:text-emerald-400 break-all bg-black/10 dark:bg-black/30 p-2 rounded-xl">
-              {chat.encryptionFingerprint}
+              {encryptionFingerprint}
             </p>
           </div>
 
@@ -208,33 +212,36 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
                   Select Contact to Add:
                 </p>
                 <div className="space-y-1.5 max-h-36 overflow-y-auto">
-                  {availableToAdd.map((cand) => (
-                    <div
-                      key={cand.id}
-                      onClick={() => {
-                        onAddMember?.(cand);
-                        setShowAddMember(false);
-                      }}
-                      className={`flex items-center justify-between p-2 rounded-xl transition cursor-pointer ${
-                        isDark ? 'hover:bg-slate-800' : 'hover:bg-white'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2">
-                        <img
-                          src={cand.avatar}
-                          alt=""
-                          className="w-7 h-7 rounded-full object-cover"
-                        />
-                        <div>
-                          <p className="text-xs font-semibold">{cand.displayName}</p>
-                          <p className="text-[10px] text-emerald-500 font-mono">{cand.customId}</p>
+                  {availableToAdd.map((cand) => {
+                    if (!cand) return null;
+                    return (
+                      <div
+                        key={cand.id}
+                        onClick={() => {
+                          onAddMember?.(cand);
+                          setShowAddMember(false);
+                        }}
+                        className={`flex items-center justify-between p-2 rounded-xl transition cursor-pointer ${
+                          isDark ? 'hover:bg-slate-800' : 'hover:bg-white'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={cand.avatar}
+                            alt=""
+                            className="w-7 h-7 rounded-full object-cover"
+                          />
+                          <div>
+                            <p className="text-xs font-semibold">{cand.displayName}</p>
+                            <p className="text-[10px] text-emerald-500 font-mono">{cand.customId}</p>
+                          </div>
                         </div>
+                        <span className="text-[10px] font-bold text-emerald-600 font-mono">
+                          + Add
+                        </span>
                       </div>
-                      <span className="text-[10px] font-bold text-emerald-600 font-mono">
-                        + Add
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
@@ -246,7 +253,8 @@ export const GroupInfoModal: React.FC<GroupInfoModalProps> = ({
               }`}
             >
               {members.map((member) => {
-                const isYou = member.id === currentUser.id;
+                if (!member) return null;
+                const isYou = member.id === currentUserId;
                 const isAdmin = member.id === groupAdminId;
 
                 return (
