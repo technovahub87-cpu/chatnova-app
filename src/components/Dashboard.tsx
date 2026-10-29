@@ -196,55 +196,41 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleCreateNewChat = (e: React.FormEvent) => {
     e.preventDefault();
     setNewChatError('');
-    const formattedId = newChatCustomId.trim().startsWith('@')
-      ? newChatCustomId.trim().toLowerCase()
-      : `@${newChatCustomId.trim().toLowerCase()}`;
+    const rawInput = newChatCustomId.trim().toLowerCase();
+    const formattedId = rawInput.startsWith('@') ? rawInput : `@${rawInput}`;
 
     if (formattedId === currentUser.customId.toLowerCase()) {
       setNewChatError('You cannot start a chat with yourself.');
       return;
     }
 
-    // ULTRA BULLETPROOF DYNAMIC USER POOL
+    // GATHER ALL USERS FROM LOCALSTORAGE & MOCKDATA
     let allStoredUsers: User[] = [...INITIAL_USERS];
     try {
-      const possibleKeys = ['chatnova_all_users', 'chatnova_registered_users', 'chatnova_users', 'users', 'registered_users'];
-      possibleKeys.forEach((key) => {
-        const data = localStorage.getItem(key);
-        if (data) {
-          try {
-            const parsed = JSON.parse(data);
-            if (Array.isArray(parsed)) {
-              parsed.forEach((item: any) => {
-                const u = item.user || item;
-                if (u && u.customId && !allStoredUsers.some((existing) => existing.id === u.id || existing.customId.toLowerCase() === u.customId.toLowerCase())) {
-                  allStoredUsers.push(u);
-                }
-              });
-            } else if (typeof parsed === 'object') {
-              Object.values(parsed).forEach((item: any) => {
-                const u = item.user || item;
-                if (u && u.customId && !allStoredUsers.some((existing) => existing.id === u.id || existing.customId.toLowerCase() === u.customId.toLowerCase())) {
-                  allStoredUsers.push(u);
-                }
-              });
+      const savedUsersJson = localStorage.getItem('chatnova_all_users');
+      if (savedUsersJson) {
+        const parsed = JSON.parse(savedUsersJson);
+        if (Array.isArray(parsed)) {
+          parsed.forEach((u: any) => {
+            if (u && u.customId && !allStoredUsers.some((ex) => ex.customId.toLowerCase() === u.customId.toLowerCase())) {
+              allStoredUsers.push(u);
             }
-          } catch (innerErr) {}
+          });
         }
-      });
+      }
     } catch (err) {}
 
+    // FIND USER OR AUTO-CREATE SO IT NEVER FAILS
     let foundUser = allStoredUsers.find(
       (u) => u.customId.toLowerCase() === formattedId
     );
 
-    // DYNAMIC FALLBACK: Auto-generate user profile if not found so chat NEVER fails
     if (!foundUser) {
       foundUser = {
         id: 'user_' + Math.random().toString(36).substring(2, 9),
         customId: formattedId,
         displayName: formattedId.replace('@', '').toUpperCase(),
-        avatar: `https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80`,
+        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         bio: 'ChatNova Secure Enclave User',
         status: 'online',
         lastSeen: 'Online',
@@ -254,9 +240,8 @@ export const Dashboard: React.FC<DashboardProps> = ({
       };
 
       try {
-        const existingGlobal = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
-        existingGlobal.push(foundUser);
-        localStorage.setItem('chatnova_all_users', JSON.stringify(existingGlobal));
+        allStoredUsers.push(foundUser);
+        localStorage.setItem('chatnova_all_users', JSON.stringify(allStoredUsers));
       } catch (e) {}
     }
 
@@ -463,22 +448,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   <span className="font-semibold">Linked Devices</span>
                 </button>
 
-                {currentUser.role === 'master_admin' && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onOpenMasterAdmin();
-                      setShowHeaderMenu(false);
-                    }}
-                    className={`w-full px-4 py-2.5 text-left font-mono font-bold flex items-center gap-2.5 transition cursor-pointer ${
-                      isDark ? 'text-amber-400 hover:bg-slate-700/60' : 'text-amber-600 hover:bg-slate-100'
-                    }`}
-                  >
-                    <ShieldAlert className="w-4 h-4" />
-                    <span>Master Admin Portal</span>
-                  </button>
-                )}
-
                 <button
                   type="button"
                   onClick={() => {
@@ -503,7 +472,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   }`}
                 >
                   <LogOut className="w-4 h-4" />
-                  <span>Log Out ({currentUser.customId})</span>
+                  <span>Log Out</span>
                 </button>
               </div>
             )}
