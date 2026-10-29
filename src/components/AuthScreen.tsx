@@ -112,7 +112,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
   };
 
   const handleOtpChange = (index: number, val: string) => {
-    if (!/^\d*\$/.test(val)) return;
+    if (!/^\d*$/.test(val)) return;
 
     const newDigits = [...otpDigits];
     newDigits[index] = val.slice(-1);
@@ -201,7 +201,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           try {
             localStorage.setItem('chatnova_registered_users', JSON.stringify(updatedMap));
             
-            // FIX: Push newly registered user into global users array so other IDs / chat search can find them instantly without "Identity not found" error
             const existingGlobalUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
             if (!existingGlobalUsers.some((u: UserType) => u.customId.toLowerCase() === cleanId)) {
               existingGlobalUsers.push(newUser);
@@ -214,7 +213,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           const existingRecord = registeredUsersMap[cleanId];
           const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === cleanId);
           
-          // Also check global localStorage user pool
           let foundGlobal = null;
           try {
             const allSaved = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
@@ -494,10 +492,102 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             </p>
 
             <div
-              className={`mb-5 p-2.5 rounded-xl border flex items-center justify-between text-xs font-mono ${
+              className={`mb-5 p-3 rounded-xl border flex items-center justify-between text-xs font-mono ${
                 isDark
-                  ? 'bg-emerald-950/40 border-emerald-500/30'
-                  : 'bg-emerald-50 border-emerald-200 text-slate-800'
+                  ? 'bg-emerald-950/40 border-emerald-500/30 text-emerald-300'
+                  : 'bg-emerald-50 border-emerald-200 text-emerald-800'
               }`}
             >
-              <span className="text-[11px] text-slate-500">Enclave Token
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
+                <span>Simulated Secure Enclave Token:</span>
+              </div>
+              <span className="font-bold tracking-widest text-sm bg-emerald-500/20 px-2 py-0.5 rounded">
+                {generatedOtp}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-center gap-2 mb-6">
+              {otpDigits.map((digit, idx) => (
+                <input
+                  key={idx}
+                  ref={(el) => (otpInputRefs.current[idx] = el)}
+                  type="text"
+                  maxLength={1}
+                  value={digit}
+                  onChange={(e) => handleOtpChange(idx, e.target.value)}
+                  onKeyDown={(e) => handleOtpKeyDown(idx, e.key)}
+                  className={`w-11 h-12 text-center text-lg font-mono font-bold rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
+                    isDark
+                      ? 'bg-[#0b141a] border-slate-700 text-white'
+                      : 'bg-slate-50 border-slate-300 text-slate-900'
+                  }`}
+                />
+              ))}
+            </div>
+
+            <div className="flex items-center justify-between text-xs mb-6 px-1">
+              <span className={isDark ? 'text-slate-400' : 'text-slate-500'}>
+                Code expires in{' '}
+                <span className="font-mono font-bold text-emerald-500">{timer}s</span>
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  const newOtp = Math.floor(100000 + Math.random() * 900000).toString();
+                  setGeneratedOtp(newOtp);
+                  setTimer(60);
+                }}
+                className="text-emerald-500 hover:underline font-semibold cursor-pointer flex items-center gap-1"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Resend Code</span>
+              </button>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={() => setStep('credentials')}
+                disabled={isVerifying}
+                className={`w-1/3 py-3 rounded-xl border text-xs font-semibold transition cursor-pointer ${
+                  isDark
+                    ? 'border-slate-700 text-slate-300 hover:bg-slate-800'
+                    : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                Back
+              </button>
+              <button
+                type="button"
+                disabled={isVerifying}
+                onClick={() => handleVerifyOtp()}
+                className="w-2/3 py-3 rounded-xl bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-bold text-xs uppercase tracking-wider shadow-lg flex items-center justify-center gap-2 cursor-pointer"
+              >
+                {isVerifying ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    <span>Verifying Enclave...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Verify & Enter ChatNova</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => handleVerifyOtp(generatedOtp)}
+              className="mt-3 text-[11px] text-emerald-500 hover:underline font-mono cursor-pointer"
+            >
+              [Quick Fill Simulated OTP: {generatedOtp}]
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
