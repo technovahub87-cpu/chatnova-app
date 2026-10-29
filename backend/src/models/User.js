@@ -27,11 +27,13 @@ const UserSchema = new mongoose.Schema(
     avatar: {
       type: String,
       default: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+      trim: true,
     },
     bio: {
       type: String,
       default: 'ChatNova encrypted communicator • Zero Logs',
       maxlength: 160,
+      trim: true,
     },
     status: {
       type: String,
@@ -45,6 +47,7 @@ const UserSchema = new mongoose.Schema(
     publicKeyFingerprint: {
       type: String,
       required: true,
+      trim: true,
     },
     role: {
       type: String,
@@ -59,6 +62,7 @@ const UserSchema = new mongoose.Schema(
     banReason: {
       type: String,
       default: '',
+      trim: true,
     },
     bannedAt: {
       type: Date,
@@ -70,6 +74,7 @@ const UserSchema = new mongoose.Schema(
     currentSocketId: {
       type: String,
       default: null,
+      trim: true,
     },
   },
   {
@@ -79,15 +84,24 @@ const UserSchema = new mongoose.Schema(
 
 // Hash password before saving
 UserSchema.pre('save', async function (next) {
-  if (!this.isModified('password')) return next();
-  const salt = await bcrypt.genSalt(12);
-  this.password = await bcrypt.hash(this.password, salt);
-  next();
+  try {
+    if (!this.isModified('password')) return next();
+    const salt = await bcrypt.genSalt(12);
+    this.password = await bcrypt.hash(this.password, salt);
+    next();
+  } catch (error) {
+    next(error);
+  }
 });
 
 // Compare password method
 UserSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
+  try {
+    if (!enteredPassword || !this.password) return false;
+    return await bcrypt.compare(enteredPassword, this.password);
+  } catch (error) {
+    return false;
+  }
 };
 
-module.exports = mongoose.model('User', UserSchema);
+module.exports = mongoose.models.User || mongoose.model('User', UserSchema);
