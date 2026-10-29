@@ -3,7 +3,7 @@ import { X, Shield, Lock, Send } from 'lucide-react';
 import { StatusStory } from '../types';
 
 interface StatusViewerModalProps {
-  story: StatusStory | null;
+  story?: StatusStory | null;
   onClose: () => void;
   onReply?: (userName: string, text: string) => void;
 }
@@ -35,7 +35,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({ story, onC
     e.preventDefault();
     if (!replyText.trim()) return;
     if (onReply) {
-      onReply(story.userName, replyText);
+      onReply(story.userName || 'User', replyText);
     }
     setReplyText('');
     onClose();
@@ -59,16 +59,16 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({ story, onC
         <div className="absolute top-6 left-4 right-4 z-20 flex items-center justify-between text-white">
           <div className="flex items-center gap-3">
             <img
-              src={story.userAvatar}
-              alt={story.userName}
+              src={story.userAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100'}
+              alt={story.userName || 'User'}
               className="w-10 h-10 rounded-full border border-emerald-400 object-cover"
             />
             <div>
               <div className="flex items-center gap-1.5">
-                <span className="font-bold text-sm text-white">{story.userName}</span>
-                <span className="text-[10px] text-emerald-400 font-mono">{story.customId}</span>
+                <span className="font-bold text-sm text-white">{story.userName || 'Unknown'}</span>
+                <span className="text-[10px] text-emerald-400 font-mono">{story.customId || '@user'}</span>
               </div>
-              <span className="text-[11px] text-white/70">{story.timestamp}</span>
+              <span className="text-[11px] text-white/70">{story.timestamp || 'Just now'}</span>
             </div>
           </div>
 
@@ -96,7 +96,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({ story, onC
             />
           ) : (
             <div className="p-8 text-center bg-gradient-to-br from-emerald-950 via-teal-900 to-slate-900 w-full h-full flex items-center justify-center">
-              <p className="text-xl font-medium text-white max-w-xs">{story.text}</p>
+              <p className="text-xl font-medium text-white max-w-xs">{story.text || 'Encrypted Status Story'}</p>
             </div>
           )}
 
@@ -118,7 +118,7 @@ export const StatusViewerModal: React.FC<StatusViewerModalProps> = ({ story, onC
               type="text"
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
-              placeholder={`Encrypted reply to ${story.userName}...`}
+              placeholder={`Encrypted reply to ${story.userName || 'user'}...`}
               className="flex-1 bg-white/10 border border-white/20 rounded-full px-4 py-2.5 text-xs text-white placeholder-white/50 focus:outline-none focus:border-emerald-400"
             />
             <button
