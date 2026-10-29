@@ -7,9 +7,9 @@ const {
   getAuditLogs,
   broadcastAnnouncement,
 } = require('../controllers/adminController');
-const { masterAdminProtect } = require('../middleware/masterAdmin');
+const { masterAdminProtect } = require('../middleware/masterAdminProtect');
 
-// All routes require Master Admin Passphrase & 2FA Token
+// All routes require Master Admin Passphrase & 2FA Token via middleware
 router.use(masterAdminProtect);
 
 router.get('/users', getAllUsers);
