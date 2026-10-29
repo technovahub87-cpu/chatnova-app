@@ -49,7 +49,9 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     
     const initialMap: Record<string, { user: UserType; pass: string }> = {};
     INITIAL_USERS.forEach((u) => {
-      initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' };
+      if (u && u.customId) {
+        initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' };
+      }
     });
     return initialMap;
   });
@@ -85,13 +87,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     }
 
     if (isRegisterMode) {
-      if (registeredUsersMap[formattedId] || INITIAL_USERS.some(u => u.customId.toLowerCase() === formattedId)) {
+      if (registeredUsersMap[formattedId] || INITIAL_USERS.some(u => u && u.customId && u.customId.toLowerCase() === formattedId)) {
         setErrorMsg(`Identity ${formattedId} is already taken. Please choose another ID or Sign In.`);
         return;
       }
     } else {
       const targetUserRecord = registeredUsersMap[formattedId];
-      const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === formattedId);
+      const foundInitial = INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === formattedId);
 
       if (!targetUserRecord && !foundInitial) {
         setErrorMsg(`Identity ${formattedId} does not exist. Please Create Nova ID first.`);
@@ -157,7 +159,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           });
         }
 
-        if (apiRes.isLiveBackend) {
+        if (apiRes && apiRes.isLiveBackend) {
           if (apiRes.success && apiRes.data?.user) {
             if (apiRes.data.token) {
               setAuthToken(apiRes.data.token);
@@ -202,7 +204,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             localStorage.setItem('chatnova_registered_users', JSON.stringify(updatedMap));
             
             const existingGlobalUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
-            if (!existingGlobalUsers.some((u: UserType) => u.customId.toLowerCase() === cleanId)) {
+            if (!existingGlobalUsers.some((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId)) {
               existingGlobalUsers.push(newUser);
               localStorage.setItem('chatnova_all_users', JSON.stringify(existingGlobalUsers));
             }
@@ -211,17 +213,17 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           onLoginSuccess(newUser);
         } else {
           const existingRecord = registeredUsersMap[cleanId];
-          const foundInitial = INITIAL_USERS.find(u => u.customId.toLowerCase() === cleanId);
+          const foundInitial = INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === cleanId);
           
           let foundGlobal = null;
           try {
             const allSaved = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-            foundGlobal = allSaved.find((u: UserType) => u.customId.toLowerCase() === cleanId);
+            foundGlobal = allSaved.find((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId);
           } catch (e) {}
 
           const userToLog = existingRecord ? existingRecord.user : (foundInitial || foundGlobal);
 
-          if (userToLog) {
+          if (userToLog && userToLog.id) {
             if ((userToLog as any).isBanned) {
               setErrorMsg('This identity has been suspended by Master Administration.');
               setStep('credentials');
@@ -313,7 +315,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
         </div>
 
         {errorMsg && (
-          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2 animate-shake">
+          <div className="mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-500 text-xs flex items-center gap-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{errorMsg}</span>
           </div>
