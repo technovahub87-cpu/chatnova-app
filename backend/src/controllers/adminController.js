@@ -10,7 +10,7 @@ exports.getAllUsers = async (req, res) => {
     const { search, status, page = 1, limit = 50 } = req.query;
 
     const query = {};
-    if (search) {
+    if (search && typeof search === 'string') {
       query.$or = [
         { customId: { $regex: search, $options: 'i' } },
         { displayName: { $regex: search, $options: 'i' } },
@@ -21,21 +21,25 @@ exports.getAllUsers = async (req, res) => {
     if (status === 'banned') query.isBanned = true;
     if (status === 'active') query.isBanned = false;
 
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10) || 50));
+
     const total = await User.countDocuments(query);
     const users = await User.find(query)
       .sort({ createdAt: -1 })
-      .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum);
 
     return res.status(200).json({
       success: true,
       total,
-      page: parseInt(page),
-      pages: Math.ceil(total / limit),
+      page: pageNum,
+      pages: Math.ceil(total / limitNum) || 1,
       users,
     });
   } catch (error) {
-    console.error('[Admin GetUsers Error]:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Admin GetUsers Error]:', errorMsg);
     return res.status(500).json({ success: false, message: 'Server error retrieving identities.' });
   }
 };
@@ -48,6 +52,10 @@ exports.toggleBanUser = async (req, res) => {
     const { id } = req.params;
     const { isBanned, reason } = req.body;
 
+    if (!id) {
+      return res.status(400).json({ success: false, message: 'User ID required.' });
+    }
+
     const user = await User.findById(id);
     if (!user) {
       return res.status(404).json({ success: false, message: 'Identity not found.' });
@@ -59,21 +67,22 @@ exports.toggleBanUser = async (req, res) => {
     await user.save();
 
     // Create Audit Log entry
-    await AuditLog.create({
-      action: isBanned ? 'USER_ACCOUNT_SUSPENDED' : 'USER_ACCOUNT_REINSTATED',
-      targetUser: user.customId,
-      actor: 'MASTER_ADMIN',
-      ipAddress: req.ip || req.connection.remoteAddress || '127.0.0.1',
-      severity: isBanned ? 'critical' : 'medium',
-      details: isBanned
-        ? `Account suspended by Master Admin. Reason: ${user.banReason}`
-        : 'Account reinstated by Master Admin.',
-    });
+    try {
+      await AuditLog.create({
+        action: isBanned ? 'USER_ACCOUNT_SUSPENDED' : 'USER_ACCOUNT_REINSTATED',
+        targetUser: user.customId || 'unknown',
+        actor: 'MASTER_ADMIN',
+        ipAddress: req.ip || req.connection?.remoteAddress || '127.0.0.1',
+        severity: isBanned ? 'critical' : 'medium',
+        details: isBanned
+          ? `Account suspended by Master Admin. Reason: ${user.banReason}`
+          : 'Account reinstated by Master Admin.',
+      });
+    } catch (auditErr) {}
 
     // Notify connected Socket.io clients if socket instance attached to req.app
     const io = req.app.get('io');
     if (io) {
-      // Broadcast user status update or disconnect user if banned
       if (user.currentSocketId && isBanned) {
         io.to(user.currentSocketId).emit('auth:force_disconnect', {
           message: 'Your identity session has been suspended by Master Administration.',
@@ -92,7 +101,8 @@ exports.toggleBanUser = async (req, res) => {
       user,
     });
   } catch (error) {
-    console.error('[Admin ToggleBan Error]:', error);
+    const errorMsg = error instanceof Error ? error.message : String(error);
+    console.error('[Admin ToggleBan Error]:', errorMsg);
     return res.status(500).json({ success: false, message: 'Server error updating identity ban status.' });
   }
 };
@@ -143,27 +153,29 @@ exports.getAuditLogs = async (req, res) => {
 exports.broadcastAnnouncement = async (req, res) => {
   try {
     const { message } = req.body;
-    if (!message) {
+    if (!message || typeof message !== 'string' || !message.trim()) {
       return res.status(400).json({ success: false, message: 'Broadcast message content required.' });
     }
 
     const io = req.app.get('io');
     if (io) {
       io.emit('admin:broadcast', {
-        message,
+        message: message.trim(),
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       });
     }
 
     // Log the broadcast event
-    await AuditLog.create({
-      action: 'ADMIN_GLOBAL_BROADCAST',
-      targetUser: 'GLOBAL_NETWORK',
-      actor: 'MASTER_ADMIN',
-      ipAddress: req.ip || '127.0.0.1',
-      severity: 'high',
-      details: `Dispatched network-wide broadcast: "${message.substring(0, 50)}..."`,
-    });
+    try {
+      await AuditLog.create({
+        action: 'ADMIN_GLOBAL_BROADCAST',
+        targetUser: 'GLOBAL_NETWORK',
+        actor: 'MASTER_ADMIN',
+        ipAddress: req.ip || '127.0.0.1',
+        severity: 'high',
+        details: `Dispatched network-wide broadcast: "${message.substring(0, 50)}..."`,
+      });
+    } catch (auditErr) {}
 
     return res.status(200).json({
       success: true,
