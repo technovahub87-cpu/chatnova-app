@@ -7,15 +7,23 @@ export const API_BASE_URL = 'local-enclave-mode';
 
 // Token Storage Helpers
 export const getAuthToken = (): string | null => {
-  return localStorage.getItem('chatnova_jwt_token');
+  try {
+    return localStorage.getItem('chatnova_jwt_token');
+  } catch (e) {
+    return null;
+  }
 };
 
 export const setAuthToken = (token: string) => {
-  localStorage.setItem('chatnova_jwt_token', token);
+  try {
+    if (token) localStorage.setItem('chatnova_jwt_token', token);
+  } catch (e) {}
 };
 
 export const removeAuthToken = () => {
-  localStorage.removeItem('chatnova_jwt_token');
+  try {
+    localStorage.removeItem('chatnova_jwt_token');
+  } catch (e) {}
 };
 
 // Pure Local Execution Wrapper (No Network Latency, No Render Timeout)
@@ -25,16 +33,22 @@ async function apiFetch<T>(
 ): Promise<{ success: boolean; data?: T; message?: string; isLiveBackend?: boolean }> {
   try {
     const method = options.method || 'GET';
-    const body = options.body ? JSON.parse(options.body as string) : {};
+    let body: any = {};
+    try {
+      if (options.body) {
+        body = JSON.parse(options.body as string);
+      }
+    } catch (e) {}
 
     // 1. REGISTER API HANDLER
     if (endpoint.includes('/auth/register')) {
-      const formattedCustomId = body.customId.startsWith('@') ? body.customId.toLowerCase() : `@${body.customId.toLowerCase()}`;
+      const rawId = body?.customId || 'user';
+      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
       
       const newUser = {
         id: 'user_' + Date.now(),
         customId: formattedCustomId,
-        displayName: body.displayName || 'Encrypted User',
+        displayName: body?.displayName || 'Encrypted User',
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
         role: formattedCustomId.includes('admin') ? 'master_admin' : 'user',
         status: 'online',
@@ -42,7 +56,7 @@ async function apiFetch<T>(
       };
 
       const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      if (!allUsers.some((u: any) => u.customId.toLowerCase() === formattedCustomId)) {
+      if (Array.isArray(allUsers) && !allUsers.some((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId)) {
         allUsers.push(newUser);
         localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
       }
@@ -61,10 +75,11 @@ async function apiFetch<T>(
 
     // 2. LOGIN API HANDLER
     if (endpoint.includes('/auth/login')) {
-      const formattedCustomId = body.customId.startsWith('@') ? body.customId.toLowerCase() : `@${body.customId.toLowerCase()}`;
+      const rawId = body?.customId || 'user';
+      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
       const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
       
-      let foundUser = allUsers.find((u: any) => u.customId.toLowerCase() === formattedCustomId);
+      let foundUser = Array.isArray(allUsers) ? allUsers.find((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId) : null;
 
       if (!foundUser) {
         // Auto-create user if not found so login never fails with "not found"
@@ -77,8 +92,10 @@ async function apiFetch<T>(
           status: 'online',
           publicKeyFingerprint: 'E2EE-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
         };
-        allUsers.push(foundUser);
-        localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
+        if (Array.isArray(allUsers)) {
+          allUsers.push(foundUser);
+          localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
+        }
       }
 
       const token = 'jwt_token_' + Date.now();
