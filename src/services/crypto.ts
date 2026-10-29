@@ -4,30 +4,39 @@
  */
 
 export function generateFingerprint(input?: string): string {
-  const seed = input || Math.random().toString(36).substring(2);
-  const segments: string[] = [];
-  for (let i = 0; i < 6; i++) {
-    let segment = '';
-    for (let j = 0; j < 5; j++) {
-      segment += Math.floor(Math.random() * 10).toString();
+  try {
+    const seed = input || Math.random().toString(36).substring(2);
+    const segments: string[] = [];
+    for (let i = 0; i < 6; i++) {
+      let segment = '';
+      for (let j = 0; j < 5; j++) {
+        segment += Math.floor(Math.random() * 10).toString();
+      }
+      segments.push(segment);
     }
-    segments.push(segment);
+    return segments.join(' ');
+  } catch (e) {
+    return '01234 56789 01234 56789 01234 56789';
   }
-  return segments.join(' ');
 }
 
 export function generatePublicKey(): string {
-  const chars = '0123456789ABCDEF';
-  let key = 'NOVA-256-';
-  for (let i = 0; i < 32; i++) {
-    if (i > 0 && i % 8 === 0) key += '-';
-    key += chars[Math.floor(Math.random() * chars.length)];
+  try {
+    const chars = '0123456789ABCDEF';
+    let key = 'NOVA-256-';
+    for (let i = 0; i < 32; i++) {
+      if (i > 0 && i % 8 === 0) key += '-';
+      key += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return key;
+  } catch (e) {
+    return 'NOVA-256-00000000-00000000-00000000-00000000';
   }
-  return key;
 }
 
-export function maskCustomId(customId: string): string {
-  if (!customId) return '@anonymous';
-  if (customId.startsWith('@')) return customId;
-  return `@${customId}`;
+export function maskCustomId(customId?: string): string {
+  if (!customId || typeof customId !== 'string') return '@anonymous';
+  const trimmed = customId.trim();
+  if (trimmed.startsWith('@')) return trimmed;
+  return `@${trimmed}`;
 }
