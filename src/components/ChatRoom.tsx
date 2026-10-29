@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
   Phone,
@@ -213,6 +213,18 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     }
   };
 
+  const formatSecs = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const s = sec % 60;
+    return `${m}:${s < 10 ? `0${s}` : s}`;
+  };
+
+  const groupSubtitle = chat.isGroup
+    ? (chat.groupMembers || [])
+        .map((m) => (m.id === currentUser.id ? 'You' : m.displayName))
+        .join(', ')
+    : null;
+
   const handleAddGroupMember = (newMember: User) => {
     if (!chat.isGroup || !onUpdateChat) return;
     const currentMembers = chat.groupMembers || [];
@@ -237,26 +249,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     onUpdateChat(updatedChat);
   };
 
-  const formatSecs = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? `0${s}` : s}`;
-  };
-
-  // Group members label subtitle
-  const groupSubtitle = chat.isGroup
-    ? (chat.groupMembers || [])
-        .map((m) => (m.id === currentUser.id ? 'You' : m.displayName))
-        .join(', ')
-    : null;
-
   return (
     <div
       className={`flex-1 flex flex-col h-full relative overflow-hidden transition-colors duration-200 ${
         isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#efeae2] text-slate-900'
       }`}
     >
-      {/* Background Chat Wallpaper pattern */}
       <div
         className={`absolute inset-0 pointer-events-none ${
           isDark
@@ -265,7 +263,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         }`}
       />
 
-      {/* TOP CHAT HEADER (WhatsApp Style) */}
+      {/* TOP CHAT HEADER */}
       <div
         className={`relative z-20 flex items-center justify-between px-3 py-2.5 border-b shadow-xs shrink-0 select-none transition-colors duration-200 ${
           isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -282,7 +280,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          {/* Contact / Group Avatar */}
           <div
             className="relative cursor-pointer shrink-0"
             onClick={() => {
@@ -308,7 +305,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             ) : null}
           </div>
 
-          {/* Contact / Group Name & Status */}
           <div
             className="cursor-pointer min-w-0"
             onClick={() => {
@@ -353,7 +349,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           </div>
         </div>
 
-        {/* Right Action Icons: Theme, Video, Voice, Info */}
         <div className="flex items-center gap-1 text-slate-500 dark:text-slate-300 shrink-0">
           <ThemeToggle />
 
@@ -413,7 +408,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
       {/* MESSAGES SCROLL AREA */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative z-10">
-        {/* End-to-End Encryption Security Banner */}
         <div
           onClick={() => {
             if (chat.isGroup) setShowGroupInfoModal(true);
@@ -443,12 +437,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           </span>
         </div>
 
-        {/* Messages List */}
         {messages.map((msg) => {
           const isMe = msg.senderId === currentUser.id;
           const isSystem = msg.type === 'system';
 
-          // System message badge
           if (isSystem) {
             return (
               <div key={msg.id} className="flex justify-center my-2">
@@ -471,7 +463,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               key={msg.id}
               className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
             >
-              {/* Message Bubble Container */}
               <div
                 className={`relative max-w-[85%] sm:max-w-md px-3.5 py-2 rounded-2xl shadow-sm text-sm break-words transition-colors ${
                   isMe
@@ -483,7 +474,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                     : 'bg-[#ffffff] text-slate-900 rounded-tl-none border border-slate-200/80 shadow-xs'
                 }`}
               >
-                {/* Sender Name in group or incoming */}
                 {!isMe && (
                   <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 mb-0.5 flex items-center gap-1">
                     <span>{msg.senderName}</span>
@@ -495,12 +485,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </p>
                 )}
 
-                {/* 1. TEXT MESSAGE */}
                 {msg.type === 'text' && (
                   <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
                 )}
 
-                {/* 2. VOICE NOTE MESSAGE */}
                 {msg.type === 'voice' && (
                   <div className="flex items-center gap-2.5 py-1 min-w-[220px]">
                     <button
@@ -568,7 +556,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </div>
                 )}
 
-                {/* 3. MEDIA / IMAGE MESSAGE */}
                 {msg.type === 'image' && msg.media && (
                   <div className="mt-0.5 mb-1.5">
                     <div className="relative rounded-xl overflow-hidden border border-black/10 dark:border-white/10 group">
@@ -591,7 +578,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </div>
                 )}
 
-                {/* 4. FILE / DOCUMENT MESSAGE */}
                 {msg.type === 'file' && msg.media && (
                   <div
                     className={`flex items-center gap-2.5 p-2 rounded-xl my-1 border ${
@@ -622,7 +608,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </div>
                 )}
 
-                {/* Timestamp & Status Ticks */}
                 <div
                   className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono select-none ${
                     isMe
@@ -649,7 +634,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           );
         })}
 
-        {/* Typing indicator bubble */}
         {isTyping && (
           <div
             className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border w-24 ${
@@ -808,16 +792,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         )}
       </div>
 
-      {/* Safety Number Inspection Modal (for 1-on-1 chats) */}
+      {/* Safety Number & Group Info Modals */}
       {!chat.isGroup && (
         <SafetyNumberModal
-          contact={chat.participant}
           isOpen={showSafetyModal}
           onClose={() => setShowSafetyModal(false)}
+          participant={chat.participant}
         />
       )}
 
-      {/* Group Info Modal (for Group chats) */}
       {chat.isGroup && (
         <GroupInfoModal
           chat={chat}
