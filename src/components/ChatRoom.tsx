@@ -74,23 +74,23 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   // Listen to WebSocket typing events
   useEffect(() => {
     const unsub = wsService.on('chat:typing', (data: any) => {
-      if (data.chatId === chat.id) {
+      if (data && data.chatId === chat?.id) {
         setIsTyping(data.isTyping);
         if (data.senderName) setTypingUser(data.senderName);
       }
     });
 
     return () => unsub();
-  }, [chat.id]);
+  }, [chat?.id]);
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
-    if (!inputText.trim()) return;
+    if (!inputText.trim() || !chat) return;
 
     const newMsg: Partial<Message> = {
       chatId: chat.id,
-      senderId: currentUser.id,
-      senderName: currentUser.displayName,
+      senderId: currentUser?.id || 'usr_me',
+      senderName: currentUser?.displayName || 'User',
       type: 'text',
       content: inputText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -117,6 +117,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   };
 
   const sendVoiceNote = () => {
+    if (!chat) return;
     setIsRecording(false);
     clearInterval(recordingTimerRef.current);
     const duration = Math.max(recordingSeconds, 3);
@@ -128,8 +129,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     const voiceMsg: Partial<Message> = {
       chatId: chat.id,
-      senderId: currentUser.id,
-      senderName: currentUser.displayName,
+      senderId: currentUser?.id || 'usr_me',
+      senderName: currentUser?.displayName || 'User',
       type: 'voice',
       content: `Voice message (${duration}s)`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -173,12 +174,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   };
 
   const handleSendMediaAttachment = (type: 'image' | 'file') => {
+    if (!chat) return;
     setShowAttachmentMenu(false);
     if (type === 'image') {
       const imgMsg: Partial<Message> = {
         chatId: chat.id,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: currentUser?.id || 'usr_me',
+        senderName: currentUser?.displayName || 'User',
         type: 'image',
         content: 'Sent an encrypted photo',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -195,8 +197,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     } else {
       const docMsg: Partial<Message> = {
         chatId: chat.id,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: currentUser?.id || 'usr_me',
+        senderName: currentUser?.displayName || 'User',
         type: 'file',
         content: 'offshore_routing_mesh.pdf',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -219,16 +221,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     return `${m}:${s < 10 ? `0${s}` : s}`;
   };
 
-  const groupSubtitle = chat.isGroup
+  const groupSubtitle = chat?.isGroup
     ? (chat.groupMembers || [])
-        .map((m) => (m.id === currentUser.id ? 'You' : m.displayName))
+        .map((m) => (m && currentUser && m.id === currentUser.id ? 'You' : m?.displayName || 'Member'))
         .join(', ')
     : null;
 
   const handleAddGroupMember = (newMember: User) => {
-    if (!chat.isGroup || !onUpdateChat) return;
+    if (!chat || !chat.isGroup || !onUpdateChat) return;
     const currentMembers = chat.groupMembers || [];
-    if (currentMembers.some((m) => m.id === newMember.id)) return;
+    if (currentMembers.some((m) => m && m.id === newMember.id)) return;
 
     const updatedMembers = [...currentMembers, newMember];
     const updatedChat: Chat = {
@@ -237,10 +239,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       lastMessage: {
         id: 'msg_' + Date.now(),
         chatId: chat.id,
-        senderId: currentUser.id,
-        senderName: currentUser.displayName,
+        senderId: currentUser?.id || 'usr_me',
+        senderName: currentUser?.displayName || 'User',
         type: 'system',
-        content: `${currentUser.displayName} added ${newMember.displayName} to the group.`,
+        content: `${currentUser?.displayName || 'User'} added ${newMember.displayName} to the group.`,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'read',
       },
@@ -248,6 +250,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     onUpdateChat(updatedChat);
   };
+
+  if (!chat) return null;
 
   return (
     <div
@@ -288,15 +292,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             }}
           >
             <img
-              src={chat.groupIcon || chat.participant.avatar}
-              alt={chat.groupName || chat.participant.displayName}
+              src={chat.groupIcon || chat.participant?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
+              alt={chat.groupName || chat.participant?.displayName || 'Chat'}
               className="w-10 h-10 rounded-full object-cover ring-1 ring-emerald-500/50"
             />
             {chat.isGroup ? (
               <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-white dark:border-[#202c33] flex items-center justify-center text-white">
                 <Users className="w-2.5 h-2.5" />
               </span>
-            ) : chat.participant.status === 'online' ? (
+            ) : chat.participant?.status === 'online' ? (
               <span
                 className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ${
                   isDark ? 'ring-[#202c33]' : 'ring-[#f0f2f5]'
@@ -318,7 +322,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   isDark ? 'text-white' : 'text-slate-900'
                 }`}
               >
-                {chat.isGroup ? chat.groupName : chat.participant.displayName}
+                {chat.isGroup ? chat.groupName : (chat.participant?.displayName || 'Unknown')}
               </h3>
               <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
             </div>
@@ -339,10 +343,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               ) : (
                 <>
                   <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                    {chat.participant.customId}
+                    {chat.participant?.customId}
                   </span>
                   <span>•</span>
-                  <span>{chat.participant.lastSeen}</span>
+                  <span>{chat.participant?.lastSeen || 'Online'}</span>
                 </>
               )}
             </p>
@@ -438,7 +442,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         </div>
 
         {messages.map((msg) => {
-          const isMe = msg.senderId === currentUser.id;
+          if (!msg) return null;
+          const isMe = currentUser && msg.senderId === currentUser.id;
           const isSystem = msg.type === 'system';
 
           if (isSystem) {
@@ -793,7 +798,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       </div>
 
       {/* Safety Number & Group Info Modals */}
-      {!chat.isGroup && (
+      {!chat.isGroup && chat.participant && (
         <SafetyNumberModal
           isOpen={showSafetyModal}
           onClose={() => setShowSafetyModal(false)}
