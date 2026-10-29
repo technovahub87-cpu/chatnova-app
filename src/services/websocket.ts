@@ -18,10 +18,12 @@ class WebSocketClient {
   private currentCustomId: string | null = null;
 
   constructor() {
-    const envUrl = (import.meta as any).env?.VITE_WS_URL;
-    if (envUrl) {
-      this.socketUrl = envUrl;
-    }
+    try {
+      const envUrl = (import.meta as any).env?.VITE_WS_URL;
+      if (envUrl) {
+        this.socketUrl = envUrl;
+      }
+    } catch (e) {}
   }
 
   public getStatus() {
@@ -37,6 +39,7 @@ class WebSocketClient {
   }
 
   public setEndpoint(newUrl: string) {
+    if (!newUrl) return;
     this.socketUrl = newUrl;
     this.disconnect();
     this.connect();
@@ -123,15 +126,18 @@ class WebSocketClient {
   }
 
   public disconnect() {
-    if (this.socket) {
-      this.socket.disconnect();
-      this.socket = null;
-    }
+    try {
+      if (this.socket) {
+        this.socket.disconnect();
+        this.socket = null;
+      }
+    } catch (e) {}
     this.isConnected = false;
     this.isLiveBackend = false;
   }
 
   public on(event: string, handler: EventHandler) {
+    if (!event || !handler) return () => {};
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
@@ -140,10 +146,12 @@ class WebSocketClient {
   }
 
   public off(event: string, handler: EventHandler) {
+    if (!event || !handler) return;
     this.listeners.get(event)?.delete(handler);
   }
 
   public emit(event: string, payload: any) {
+    if (!event) return;
     const handlers = this.listeners.get(event);
     if (handlers) {
       handlers.forEach((h) => {
@@ -160,13 +168,14 @@ class WebSocketClient {
    * Send payload via live Socket.io (Automated bot replies completely removed)
    */
   public send(event: string, payload: any) {
+    if (!event) return;
     if (this.isLiveBackend && this.socket && this.socket.connected) {
       this.socket.emit(event, payload);
     } else {
       // Local mode: Just update message status to delivered, NO FAKE BOT REPLIES
-      if (event === 'chat:send_message') {
+      if (event === 'chat:send_message' && payload) {
         const message = payload.message;
-        if (message) {
+        if (message && message.id) {
           setTimeout(() => {
             this.emit('chat:message_status', {
               messageId: message.id,
