@@ -22,7 +22,9 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onComplete }) => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(timer);
-          setTimeout(onComplete, 450);
+          setTimeout(() => {
+            if (onComplete) onComplete();
+          }, 450);
           return 100;
         }
         const nextVal = prev + Math.floor(Math.random() * 12) + 8;
