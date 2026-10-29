@@ -48,11 +48,13 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     } catch (e) {}
     
     const initialMap: Record<string, { user: UserType; pass: string }> = {};
-    INITIAL_USERS.forEach((u) => {
-      if (u && u.customId) {
-        initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' };
-      }
-    });
+    if (Array.isArray(INITIAL_USERS)) {
+      INITIAL_USERS.forEach((u) => {
+        if (u && u.customId) {
+          initialMap[u.customId.toLowerCase()] = { user: u, pass: 'Narendra@1956' };
+        }
+      });
+    }
     return initialMap;
   });
 
@@ -62,7 +64,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
   useEffect(() => {
     let interval: any;
     if (step === 'otp' && timer > 0) {
-      interval = setInterval(() => setTimer((t) => t - 1), 1000);
+      interval = setInterval(() => setTimer((t) => t > 0 ? t - 1 : 0), 1000);
     }
     return () => clearInterval(interval);
   }, [step, timer]);
@@ -87,13 +89,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
     }
 
     if (isRegisterMode) {
-      if (registeredUsersMap[formattedId] || INITIAL_USERS.some(u => u && u.customId && u.customId.toLowerCase() === formattedId)) {
+      const initialExists = Array.isArray(INITIAL_USERS) && INITIAL_USERS.some(u => u && u.customId && u.customId.toLowerCase() === formattedId);
+      if (registeredUsersMap[formattedId] || initialExists) {
         setErrorMsg(`Identity ${formattedId} is already taken. Please choose another ID or Sign In.`);
         return;
       }
     } else {
       const targetUserRecord = registeredUsersMap[formattedId];
-      const foundInitial = INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === formattedId);
+      const foundInitial = Array.isArray(INITIAL_USERS) ? INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === formattedId) : null;
 
       if (!targetUserRecord && !foundInitial) {
         setErrorMsg(`Identity ${formattedId} does not exist. Please Create Nova ID first.`);
@@ -204,7 +207,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             localStorage.setItem('chatnova_registered_users', JSON.stringify(updatedMap));
             
             const existingGlobalUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || JSON.stringify(INITIAL_USERS));
-            if (!existingGlobalUsers.some((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId)) {
+            if (Array.isArray(existingGlobalUsers) && !existingGlobalUsers.some((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId)) {
               existingGlobalUsers.push(newUser);
               localStorage.setItem('chatnova_all_users', JSON.stringify(existingGlobalUsers));
             }
@@ -213,12 +216,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           onLoginSuccess(newUser);
         } else {
           const existingRecord = registeredUsersMap[cleanId];
-          const foundInitial = INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === cleanId);
+          const foundInitial = Array.isArray(INITIAL_USERS) ? INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === cleanId) : null;
           
           let foundGlobal = null;
           try {
             const allSaved = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-            foundGlobal = allSaved.find((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId);
+            if (Array.isArray(allSaved)) {
+              foundGlobal = allSaved.find((u: UserType) => u && u.customId && u.customId.toLowerCase() === cleanId);
+            }
           } catch (e) {}
 
           const userToLog = existingRecord ? existingRecord.user : (foundInitial || foundGlobal);
@@ -513,12 +518,14 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               {otpDigits.map((digit, idx) => (
                 <input
                   key={idx}
-                  ref={(el) => (otpInputRefs.current[idx] = el)}
+                  ref={(el) => {
+                    otpInputRefs.current[idx] = el;
+                  }}
                   type="text"
                   maxLength={1}
                   value={digit}
                   onChange={(e) => handleOtpChange(idx, e.target.value)}
-                  onKeyDown={(e) => handleOtpKeyDown(idx, e.key)}
+                  onKeyDown={(e) => handleOtpKeyDown(idx, e)}
                   className={`w-11 h-12 text-center text-lg font-mono font-bold rounded-xl border transition focus:outline-none focus:ring-2 focus:ring-emerald-500 ${
                     isDark
                       ? 'bg-[#0b141a] border-slate-700 text-white'
