@@ -4,7 +4,7 @@ import { User } from '../types';
 import { useTheme } from '../context/ThemeContext';
 
 interface SafetyNumberModalProps {
-  contact: User;
+  contact?: User | null;
   isOpen: boolean;
   onClose: () => void;
 }
@@ -14,12 +14,16 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({ contact, i
   const [copied, setCopied] = useState(false);
   const [isVerified, setIsVerified] = useState(false);
 
-  if (!isOpen) return null;
+  if (!isOpen || !contact) return null;
+
+  const fingerprint = contact.publicKeyFingerprint || 'E2EE-FP-0000-0000-0000';
 
   const handleCopy = () => {
-    navigator.clipboard?.writeText(contact.publicKeyFingerprint);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      navigator.clipboard?.writeText(fingerprint);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (e) {}
   };
 
   return (
@@ -68,8 +72,8 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({ contact, i
                 <Lock className="w-4 h-4 text-white" />
               </div>
             </div>
-            <span className="text-[10px] text-slate-700 font-mono mt-1 font-semibold">
-              {contact.customId}
+            <span className="text-[10px] text-slate-700 font-mono mt-1 font-semibold truncate max-w-[140px]">
+              {contact.customId || '@user'}
             </span>
           </div>
 
@@ -80,13 +84,13 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({ contact, i
           >
             To verify that calls and messages with{' '}
             <strong className={isDark ? 'text-white' : 'text-slate-900'}>
-              {contact.displayName}
+              {contact.displayName || 'Contact'}
             </strong>{' '}
             are end-to-end encrypted with zero intermediary interception, compare these numbers or scan the QR.
           </p>
         </div>
 
-        {/* 60 Digit Number Block */}
+        {/* Safety Number Block */}
         <div
           className={`border rounded-xl p-3 mb-5 ${
             isDark ? 'bg-[#0b141a] border-slate-800' : 'bg-slate-50 border-slate-200'
@@ -108,11 +112,11 @@ export const SafetyNumberModal: React.FC<SafetyNumberModalProps> = ({ contact, i
             </button>
           </div>
           <div
-            className={`font-mono text-xs tracking-wider text-center select-all font-semibold leading-relaxed ${
+            className={`font-mono text-xs tracking-wider text-center select-all font-semibold leading-relaxed break-all ${
               isDark ? 'text-slate-200' : 'text-slate-800'
             }`}
           >
-            {contact.publicKeyFingerprint} 7210 9940 8219 0134 5582 1920
+            {fingerprint} 7210 9940 8219 0134 5582 1920
           </div>
         </div>
 
