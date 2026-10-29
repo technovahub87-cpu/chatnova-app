@@ -3,7 +3,7 @@ import { Phone, PhoneOff, Mic, MicOff, Video, VideoOff, Volume2, VolumeX, Shield
 import { User } from '../types';
 
 interface CallModalProps {
-  participant: User;
+  participant?: User | null;
   type: 'voice' | 'video';
   isOpen: boolean;
   onClose: () => void;
@@ -47,7 +47,7 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
     return () => clearInterval(interval);
   }, [isOpen, callState]);
 
-  if (!isOpen) return null;
+  if (!isOpen || !participant) return null;
 
   const formatTime = (totalSec: number) => {
     const mins = Math.floor(totalSec / 60);
@@ -76,8 +76,8 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
             )}
             <div className="w-28 h-28 rounded-full ring-4 ring-emerald-500/40 p-1 overflow-hidden shadow-[0_0_30px_rgba(16,185,129,0.3)]">
               <img
-                src={participant.avatar}
-                alt={participant.displayName}
+                src={participant.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150'}
+                alt={participant.displayName || 'User'}
                 className="w-full h-full rounded-full object-cover"
               />
             </div>
@@ -86,8 +86,8 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
             </div>
           </div>
 
-          <h3 className="text-xl font-bold text-white mb-0.5">{participant.displayName}</h3>
-          <p className="text-xs text-emerald-400 font-mono mb-2">{participant.customId}</p>
+          <h3 className="text-xl font-bold text-white mb-0.5">{participant.displayName || 'Unknown Contact'}</h3>
+          <p className="text-xs text-emerald-400 font-mono mb-2">{participant.customId || '@user'}</p>
 
           <p className="text-xs font-mono tracking-wider text-slate-400">
             {callState === 'connecting' && 'Establishing cryptographic handshake...'}
@@ -113,7 +113,7 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
           <button
             type="button"
             onClick={() => setIsMuted(!isMuted)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition cursor-pointer ${
               isMuted ? 'bg-rose-500/80 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
             }`}
           >
@@ -123,7 +123,7 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
           <button
             type="button"
             onClick={() => setIsVideoOn(!isVideoOn)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition cursor-pointer ${
               isVideoOn ? 'bg-emerald-600 text-white' : 'bg-slate-800/80 text-slate-300 hover:bg-slate-700'
             }`}
           >
@@ -133,7 +133,7 @@ export const CallModal: React.FC<CallModalProps> = ({ participant, type, isOpen,
           <button
             type="button"
             onClick={() => setIsSpeakerOn(!isSpeakerOn)}
-            className={`w-12 h-12 rounded-full flex items-center justify-center transition ${
+            className={`w-12 h-12 rounded-full flex items-center justify-center transition cursor-pointer ${
               isSpeakerOn ? 'bg-slate-800/80 text-slate-300' : 'bg-slate-900 text-slate-500'
             }`}
           >
