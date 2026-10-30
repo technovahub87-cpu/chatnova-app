@@ -1,7 +1,6 @@
 /**
  * Offshore WebSocket & Socket.io Real-time Client
- * Integrates directly with Node.js backend running Socket.io,
- * with clean zero-fake-reply communication.
+ * Integrates directly with Node.js backend running Socket.io
  */
 import { io as socketIO, Socket } from 'socket.io-client';
 import { getAuthToken } from './api';
@@ -33,8 +32,8 @@ class WebSocketClient {
       url: this.socketUrl,
       gateway: this.isLiveBackend
         ? 'Live Offshore Node.js Relay'
-        : 'Local Secure Enclave (Simulation Mode - No Bot Replies)',
-      latencyMs: this.isLiveBackend ? 11 : 14,
+        : 'Connecting to Live Backend...',
+      latencyMs: 11,
     };
   }
 
@@ -56,11 +55,17 @@ class WebSocketClient {
       try {
         const token = getAuthToken();
 
-        // Initialize real Socket.io client
+        if (this.socket) {
+          this.socket.disconnect();
+        }
+
+        // Initialize real Socket.io client with robust polling/websocket support for Render
         this.socket = socketIO(this.socketUrl, {
           transports: ['websocket', 'polling'],
-          timeout: 6000,
-          reconnectionAttempts: 5,
+          timeout: 10000,
+          reconnection: true,
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
           auth: {
             token,
             userId: this.currentUserId,
@@ -71,9 +76,9 @@ class WebSocketClient {
         this.socket.on('connect', () => {
           this.isConnected = true;
           this.isLiveBackend = true;
-          console.log(`[ChatNova Socket.io] Connected to live backend at ${this.socketUrl}`);
+          console.log(`[ChatNova Socket.io] Connected successfully to live backend at ${this.socketUrl}`);
 
-          // Register identity
+          // Register identity immediately on connect
           if (this.currentUserId) {
             this.socket?.emit('auth:init', {
               userId: this.currentUserId,
@@ -105,23 +110,24 @@ class WebSocketClient {
         });
 
         this.socket.on('connect_error', (err) => {
+          this.isConnected = false;
           this.isLiveBackend = false;
-          this.isConnected = true;
           console.warn('[ChatNova Socket.io] Live backend connection error:', err);
-          console.log('[ChatNova Socket.io] Live backend not detected. Operating in clean local mode (No automated bot replies).');
           this.emit('connection:open', { url: this.socketUrl, isLive: false });
-          resolve(true);
+          resolve(false);
         });
 
-        this.socket.on('disconnect', () => {
+        this.socket.on('disconnect', (reason) => {
           this.isConnected = false;
+          this.isLiveBackend = false;
+          console.warn('[ChatNova Socket.io] Disconnected:', reason);
           this.emit('connection:close', {});
         });
       } catch (err) {
+        this.isConnected = false;
         this.isLiveBackend = false;
-        this.isConnected = true;
         this.emit('connection:open', { url: this.socketUrl, isLive: false });
-        resolve(true);
+        resolve(false);
       }
     });
   }
@@ -154,11 +160,6 @@ class WebSocketClient {
   public emit(event: string, payload: any) {
     if (!event) return;
 
-    // Live backend par automatically socket.emit bhej do agar chat event hai
-    if (this.isLiveBackend && this.socket && this.socket.connected && event.startsWith('chat:')) {
-      this.socket.emit(event, payload);
-    }
-
     const handlers = this.listeners.get(event);
     if (handlers) {
       handlers.forEach((h) => {
@@ -172,24 +173,14 @@ class WebSocketClient {
   }
 
   /**
-   * Send payload via live Socket.io
+   * Send payload directly via live Socket.io to backend
    */
   public send(event: string, payload: any) {
     if (!event) return;
-    if (this.isLiveBackend && this.socket && this.socket.connected) {
+    if (this.socket && this.socket.connected) {
       this.socket.emit(event, payload);
     } else {
-      if (event === 'chat:send_message' && payload) {
-        const message = payload.message;
-        if (message && message.id) {
-          setTimeout(() => {
-            this.emit('chat:message_status', {
-              messageId: message.id,
-              status: 'delivered',
-            });
-          }, 500);
-        }
-      }
+      console.warn('[ChatNova Socket.io] Cannot send message, socket not connected:', event);
     }
   }
 }
