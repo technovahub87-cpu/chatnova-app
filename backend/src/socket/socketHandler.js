@@ -104,6 +104,13 @@ const initSocket = (io) => {
         let recipient = null;
         if (recipientId) {
           recipient = await User.findById(recipientId);
+        } else if (chatId && !chatId.startsWith('chat_') && chatId.includes('_')) {
+          // Fallback: chatId deterministic format me hai (e.g., "user1_user2")
+          const parts = chatId.split('_');
+          const otherUserId = parts.find(id => id !== senderId.toString());
+          if (otherUserId) {
+            recipient = await User.findById(otherUserId);
+          }
         }
 
         // Persist message in MongoDB
