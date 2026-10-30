@@ -53,7 +53,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
 
-  // Robust ChatId generator that handles both user IDs and custom IDs safely
+  // Deterministic chatId generator
   const getDeterministicChatId = () => {
     if (chat.isGroup) return chat.id;
     if (chat.participant && currentUser) {
@@ -86,30 +86,30 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Join socket room and register user identity on mount
+  // Join socket room and listen to live incoming messages
   useEffect(() => {
     if (targetChatId) {
       wsService.emit('chat:join', targetChatId);
     }
-    if (currentUser?.id) {
-      wsService.emit('auth:init', {
-        userId: currentUser.id,
-        customId: currentUser.customId,
-      });
-    }
-  }, [targetChatId, currentUser]);
 
-  // Listen to WebSocket typing events
-  useEffect(() => {
-    const unsub = wsService.on('chat:typing', (data: any) => {
-      if (data && (data.chatId === targetChatId || data.recipientId === currentUser?.id)) {
+    const unsubMessage = wsService.on('chat:new_message', (incomingMsg: any) => {
+      if (incomingMsg && (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id)) {
+        onSendMessage(incomingMsg);
+      }
+    });
+
+    const unsubTyping = wsService.on('chat:typing', (data: any) => {
+      if (data && data.chatId === targetChatId && data.senderCustomId !== currentUser?.customId) {
         setIsTyping(data.isTyping);
         if (data.senderName) setTypingUser(data.senderName);
       }
     });
 
-    return () => unsub();
-  }, [targetChatId, currentUser]);
+    return () => {
+      unsubMessage();
+      unsubTyping();
+    };
+  }, [targetChatId, currentUser, onSendMessage]);
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -123,6 +123,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       chatId: targetChatId,
       recipientId: recipientId,
       senderId: senderId,
+      senderName: currentUser?.displayName || 'User',
       content: inputText.trim(),
       type: 'text',
       tempId: tempId,
@@ -139,7 +140,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       type: 'text',
       content: inputText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent', // Set to sent directly so timer doesn't hang
+      status: 'sent',
     };
 
     onSendMessage(newMsg);
@@ -180,6 +181,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       chatId: targetChatId,
       recipientId: recipientId,
       senderId: senderId,
+      senderName: currentUser?.displayName || 'User',
       content: `Voice message (${duration}s)`,
       type: 'voice',
       tempId: tempId,
@@ -250,6 +252,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         chatId: targetChatId,
         recipientId: recipientId,
         senderId: senderId,
+        senderName: currentUser?.displayName || 'User',
         content: 'Sent an encrypted photo',
         type: 'image',
         tempId: tempId,
@@ -281,6 +284,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         chatId: targetChatId,
         recipientId: recipientId,
         senderId: senderId,
+        senderName: currentUser?.displayName || 'User',
         content: 'offshore_routing_mesh.pdf',
         type: 'file',
         tempId: tempId,
@@ -530,7 +534,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
         {messages.map((msg) => {
           if (!msg) return null;
-          const isMe = currentUser && (msg.senderId === currentUser.id || msg.senderId === currentUser.customId);
+          const isMe = currentUser && (msg.senderId === currentUser.id || msg.senderId === currentUser.customId || msg.senderName === currentUser.displayName);
           const isSystem = msg.type === 'system';
 
           if (isSystem) {
@@ -568,12 +572,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               >
                 {!isMe && (
                   <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 mb-0.5 flex items-center gap-1">
-                    <span>{msg.senderName}</span>
-                    {chat.isGroup && (
-                      <span className="text-[9.5px] text-slate-400 font-mono font-normal">
-                        ({msg.senderId})
-                      </span>
-                    )}
+                    <span>{msg.senderName || 'User'}</span>
                   </p>
                 )}
 
@@ -714,10 +713,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   <span>{msg.timestamp}</span>
                   {isMe && (
                     <span className="inline-flex">
-                      {msg.status === 'sending' && <Clock className="w-3 h-3 animate-spin" />}
-                      {msg.status === 'sent' && <Check className="w-3 h-3 text-slate-400" />}
-                      {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-slate-400" />}
-                      {msg.status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-300" />}
+                      <CheckCheck className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-300" />
                     </span>
                   )}
                 </div>
