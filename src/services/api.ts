@@ -1,9 +1,8 @@
 /**
- * ChatNova Pure Client-Side API Client for Render Free Tier
- * Eliminates localhost:5000 dependency entirely.
+ * ChatNova Live API Client for Render Backend
  */
 
-export const API_BASE_URL = 'local-enclave-mode';
+export const API_BASE_URL = (import.meta as any).env?.VITE_API_URL || 'https://chatnova-app-n20j.onrender.com/api';
 
 // Token Storage Helpers
 export const getAuthToken = (): string | null => {
@@ -26,128 +25,42 @@ export const removeAuthToken = () => {
   } catch (e) {}
 };
 
-// Pure Local Execution Wrapper (No Network Latency, No Render Timeout)
+// Real Live API Fetch Wrapper connected to Render Backend
 async function apiFetch<T>(
   endpoint: string,
   options: RequestInit = {}
 ): Promise<{ success: boolean; data?: T; message?: string; isLiveBackend?: boolean }> {
   try {
-    const method = options.method || 'GET';
-    let body: any = {};
-    try {
-      if (options.body) {
-        body = JSON.parse(options.body as string);
-      }
-    } catch (e) {}
+    const token = getAuthToken();
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+      ...(options.headers as Record<string, string>),
+    };
 
-    // 1. REGISTER API HANDLER
-    if (endpoint.includes('/auth/register')) {
-      const rawId = body?.customId || 'user';
-      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
-      
-      const newUser = {
-        id: 'user_' + Date.now(),
-        customId: formattedCustomId,
-        displayName: body?.displayName || 'Encrypted User',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: formattedCustomId.includes('admin') ? 'master_admin' : 'user',
-        status: 'online',
-        publicKeyFingerprint: 'E2EE-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-      };
-
-      const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      if (Array.isArray(allUsers) && !allUsers.some((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId)) {
-        allUsers.push(newUser);
-        localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
-      }
-
-      const token = 'jwt_token_' + Date.now();
-      setAuthToken(token);
-      localStorage.setItem('chatnova_current_user', JSON.stringify(newUser));
-
-      return {
-        success: true,
-        data: { token, user: newUser } as unknown as T,
-        message: 'Registered successfully',
-        isLiveBackend: false,
-      };
+    if (token) {
+      headers['Authorization'] = `Bearer ${token}`;
     }
 
-    // 2. LOGIN API HANDLER
-    if (endpoint.includes('/auth/login')) {
-      const rawId = body?.customId || 'user';
-      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
-      const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      
-      let foundUser = Array.isArray(allUsers) ? allUsers.find((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId) : null;
+    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
 
-      if (!foundUser) {
-        // Auto-create user if not found so login never fails with "not found"
-        foundUser = {
-          id: 'user_' + Date.now(),
-          customId: formattedCustomId,
-          displayName: formattedCustomId.replace('@', '').toUpperCase(),
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-          role: formattedCustomId.includes('admin') ? 'master_admin' : 'user',
-          status: 'online',
-          publicKeyFingerprint: 'E2EE-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-        };
-        if (Array.isArray(allUsers)) {
-          allUsers.push(foundUser);
-          localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
-        }
-      }
+    const response = await fetch(url, {
+      ...options,
+      headers,
+    });
 
-      const token = 'jwt_token_' + Date.now();
-      setAuthToken(token);
-      localStorage.setItem('chatnova_current_user', JSON.stringify(foundUser));
+    const result = await response.json();
 
-      return {
-        success: true,
-        data: { token, user: foundUser } as unknown as T,
-        message: 'Logged in successfully',
-        isLiveBackend: false,
-      };
-    }
-
-    // 3. GET ME API HANDLER
-    if (endpoint.includes('/auth/me')) {
-      const currentUserStr = localStorage.getItem('chatnova_current_user');
-      const user = currentUserStr ? JSON.parse(currentUserStr) : {
-        id: 'user_1',
-        customId: '@narendra_56',
-        displayName: 'Narendra Sharma',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: 'master_admin',
-      };
-
-      return {
-        success: true,
-        data: { user } as unknown as T,
-        isLiveBackend: false,
-      };
-    }
-
-    // 4. ADMIN USERS HANDLER
-    if (endpoint.includes('/admin/users')) {
-      const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      return {
-        success: true,
-        data: { users: allUsers, total: allUsers.length, page: 1 } as unknown as T,
-        isLiveBackend: false,
-      };
-    }
-
-    // Default success response for other admin actions
     return {
-      success: true,
-      message: 'Operation completed successfully',
-      isLiveBackend: false,
+      success: response.ok && (result.success !== false),
+      data: result.data || result,
+      message: result.message || 'Success',
+      isLiveBackend: true,
     };
   } catch (error: any) {
+    console.error('[API Fetch Error]:', error);
     return {
       success: false,
-      message: 'Local execution error',
+      message: error.message || 'Network connection error',
       isLiveBackend: false,
     };
   }
@@ -156,17 +69,31 @@ async function apiFetch<T>(
 // 1. AUTHENTICATION APIS
 export const authAPI = {
   register: async (payload: { customId: string; displayName: string; password: string }) => {
-    return apiFetch<{ token: string; user: any }>('/auth/register', {
+    const res = await apiFetch<{ token: string; user: any }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    if (res.success && res.data?.token) {
+      setAuthToken(res.data.token);
+      if (res.data.user) {
+        localStorage.setItem('chatnova_current_user', JSON.stringify(res.data.user));
+      }
+    }
+    return res;
   },
 
   login: async (payload: { customId: string; password: string }) => {
-    return apiFetch<{ token: string; user: any }>('/auth/login', {
+    const res = await apiFetch<{ token: string; user: any }>('/auth/login', {
       method: 'POST',
       body: JSON.stringify(payload),
     });
+    if (res.success && res.data?.token) {
+      setAuthToken(res.data.token);
+      if (res.data.user) {
+        localStorage.setItem('chatnova_current_user', JSON.stringify(res.data.user));
+      }
+    }
+    return res;
   },
 
   getMe: async () => {
