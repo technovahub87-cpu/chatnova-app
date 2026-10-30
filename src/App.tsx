@@ -32,8 +32,16 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
+    // FIX: Agar user pehle se logged in hai, toh socket connect karte waqt userId aur customId pass karo!
     try {
-      wsService.connect();
+      if (currentUser && currentUser.id) {
+        wsService.connect({
+          userId: currentUser.id,
+          customId: currentUser.customId || '',
+        });
+      } else {
+        wsService.connect();
+      }
     } catch (e) {}
 
     try {
@@ -85,19 +93,25 @@ function AppContent() {
     checkHashRoute();
     window.addEventListener('hashchange', checkHashRoute);
     return () => window.removeEventListener('hashchange', checkHashRoute);
-  }, []);
+  }, [currentUser]);
 
   const handleLoginSuccess = (user: User) => {
     if (!user || !user.id) return;
     setCurrentUser(user);
     try {
       localStorage.setItem('chatnova_current_user', JSON.stringify(user));
+      // FIX: Login hote hi socket ko authenticate karo taaki backend ko pata chale kaun online aaya hai
+      wsService.connect({
+        userId: user.id,
+        customId: user.customId || '',
+      });
     } catch (e) {}
   };
 
   const handleLogout = () => {
     setCurrentUser(null);
     try {
+      wsService.disconnect();
       localStorage.removeItem('chatnova_current_user');
       localStorage.removeItem('chatnova_jwt_token');
     } catch (e) {}
@@ -107,6 +121,7 @@ function AppContent() {
     if (currentUser && currentUser.id === userId && isBanned) {
       setCurrentUser(null);
       try {
+        wsService.disconnect();
         localStorage.removeItem('chatnova_current_user');
       } catch (e) {}
     }
