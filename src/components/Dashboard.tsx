@@ -164,6 +164,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const handleSendMessage = (msgData: Partial<Message>) => {
     if (!activeChatId) return;
 
+    const currentChat = chats.find((c) => c.id === activeChatId);
+    const targetRecipientId = currentChat?.participant?.id;
+
     const fullMsg: Message = {
       id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
       chatId: activeChatId,
@@ -186,10 +189,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       prev.map((c) => (c.id === activeChatId ? { ...c, lastMessage: fullMsg } : c))
     );
 
-    const currentChat = chats.find((c) => c.id === activeChatId);
     wsService.send('chat:send_message', {
       chatId: activeChatId,
-      recipientId: currentChat?.participant?.id,
+      recipientId: targetRecipientId,
       recipientName: currentChat?.participant?.displayName,
       isGroup: currentChat?.isGroup,
       groupName: currentChat?.groupName,
