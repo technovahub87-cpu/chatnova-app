@@ -53,7 +53,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
 
-  // Deterministic chatId generator
   const getDeterministicChatId = () => {
     if (chat.isGroup) return chat.id;
     if (chat.participant && currentUser) {
@@ -68,11 +67,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
   const targetChatId = getDeterministicChatId();
 
-  // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
 
-  // Voice playback state
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
   const [voiceProgress, setVoiceProgress] = useState<{ [id: string]: number }>({});
@@ -81,20 +78,24 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const recordingTimerRef = useRef<any>(null);
   const playbackTimerRef = useRef<any>(null);
 
-  // Scroll to bottom on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Join socket room and listen to live incoming messages
   useEffect(() => {
     if (targetChatId) {
       wsService.emit('chat:join', targetChatId);
     }
 
     const unsubMessage = wsService.on('chat:new_message', (incomingMsg: any) => {
-      if (incomingMsg && (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id)) {
-        onSendMessage(incomingMsg);
+      if (incomingMsg && incomingMsg.content && (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id)) {
+        if (incomingMsg.senderId !== currentUser?.id && incomingMsg.senderId !== currentUser?.customId) {
+          onSendMessage({
+            ...incomingMsg,
+            senderName: incomingMsg.senderName || chat.participant?.displayName || 'User',
+            status: 'delivered',
+          });
+        }
       }
     });
 
@@ -109,7 +110,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       unsubMessage();
       unsubTyping();
     };
-  }, [targetChatId, currentUser, onSendMessage]);
+  }, [targetChatId, currentUser, chat, onSendMessage]);
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -129,7 +130,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       tempId: tempId,
     };
 
-    // Send via live websocket service
     wsService.send('chat:send_message', socketPayload);
 
     const newMsg: Partial<Message> = {
@@ -140,7 +140,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       type: 'text',
       content: inputText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent',
+      status: 'delivered',
     };
 
     onSendMessage(newMsg);
@@ -196,7 +196,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       type: 'voice',
       content: `Voice message (${duration}s)`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent',
+      status: 'delivered',
       voice: { duration, waveform },
     };
 
@@ -267,7 +267,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         type: 'image',
         content: 'Sent an encrypted photo',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'sent',
+        status: 'delivered',
         media: mediaObj,
       };
       onSendMessage(imgMsg);
@@ -299,7 +299,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         type: 'file',
         content: 'offshore_routing_mesh.pdf',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'sent',
+        status: 'delivered',
         media: mediaObj,
       };
       onSendMessage(docMsg);
@@ -358,7 +358,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         }`}
       />
 
-      {/* TOP CHAT HEADER */}
       <div
         className={`relative z-20 flex items-center justify-between px-3 py-2.5 border-b shadow-xs shrink-0 select-none transition-colors duration-200 ${
           isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -501,7 +500,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         </div>
       </div>
 
-      {/* MESSAGES SCROLL AREA */}
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative z-10">
         <div
           onClick={() => {
@@ -572,7 +570,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               >
                 {!isMe && (
                   <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 mb-0.5 flex items-center gap-1">
-                    <span>{msg.senderName || 'User'}</span>
+                    <span>{msg.senderName || chat.participant?.displayName || 'User'}</span>
                   </p>
                 )}
 
@@ -737,7 +735,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ATTACHMENT POPUP MENU */}
       {showAttachmentMenu && (
         <div
           className={`absolute bottom-16 left-4 z-30 p-2 rounded-2xl border shadow-2xl flex flex-col gap-1 w-52 animate-in fade-in slide-in-from-bottom-2 ${
@@ -778,7 +775,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         </div>
       )}
 
-      {/* BOTTOM INPUT & VOICE RECORDING BAR */}
       <div
         className={`relative z-20 px-3 py-2 border-t shrink-0 transition-colors duration-200 ${
           isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
@@ -889,7 +885,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         )}
       </div>
 
-      {/* Safety Number & Group Info Modals */}
       {!chat.isGroup && chat.participant && (
         <SafetyNumberModal
           isOpen={showSafetyModal}
