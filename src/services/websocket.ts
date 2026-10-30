@@ -9,7 +9,7 @@ import { getAuthToken } from './api';
 type EventHandler = (payload: any) => void;
 
 class WebSocketClient {
-  private socketUrl: string = (import.meta as any).env?.VITE_WS_URL || 'http://localhost:5000';
+  private socketUrl: string = (import.meta as any).env?.VITE_WS_URL || 'https://chatnova-app-n20j.onrender.com';
   private socket: Socket | null = null;
   private listeners: Map<string, Set<EventHandler>> = new Map();
   private isConnected: boolean = false;
@@ -59,8 +59,8 @@ class WebSocketClient {
         // Initialize real Socket.io client
         this.socket = socketIO(this.socketUrl, {
           transports: ['websocket', 'polling'],
-          timeout: 4000,
-          reconnectionAttempts: 2,
+          timeout: 6000,
+          reconnectionAttempts: 5,
           auth: {
             token,
             userId: this.currentUserId,
@@ -104,9 +104,10 @@ class WebSocketClient {
           });
         });
 
-        this.socket.on('connect_error', () => {
+        this.socket.on('connect_error', (err) => {
           this.isLiveBackend = false;
           this.isConnected = true;
+          console.warn('[ChatNova Socket.io] Live backend connection error:', err);
           console.log('[ChatNova Socket.io] Live backend not detected. Operating in clean local mode (No automated bot replies).');
           this.emit('connection:open', { url: this.socketUrl, isLive: false });
           resolve(true);
