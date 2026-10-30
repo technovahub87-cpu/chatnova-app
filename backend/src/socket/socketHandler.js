@@ -283,4 +283,4 @@ const initSocket = (io) => {
   });
 };
 
-model.exports = initSocket;
+module.exports = initSocket;
