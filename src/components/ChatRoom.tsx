@@ -53,10 +53,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
   const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
 
-  // Deterministic chatId generator taaki dono users ke liye hamesha same ID bane
-  const targetChatId = (!chat.isGroup && chat.participant && currentUser)
-    ? [currentUser.id, chat.participant.id].sort().join('_')
-    : chat.id;
+  // Robust ChatId generator that handles both user IDs and custom IDs safely
+  const getDeterministicChatId = () => {
+    if (chat.isGroup) return chat.id;
+    if (chat.participant && currentUser) {
+      const id1 = currentUser.id || currentUser.customId;
+      const id2 = chat.participant.id || chat.participant.customId;
+      if (id1 && id2) {
+        return [id1, id2].sort().join('_');
+      }
+    }
+    return chat.id || 'chat_default';
+  };
+
+  const targetChatId = getDeterministicChatId();
 
   // Voice recording state
   const [isRecording, setIsRecording] = useState(false);
@@ -76,42 +86,49 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages, isTyping]);
 
-  // Join socket room with targetChatId
+  // Join socket room and register user identity on mount
   useEffect(() => {
     if (targetChatId) {
       wsService.emit('chat:join', targetChatId);
     }
-  }, [targetChatId]);
+    if (currentUser?.id) {
+      wsService.emit('auth:init', {
+        userId: currentUser.id,
+        customId: currentUser.customId,
+      });
+    }
+  }, [targetChatId, currentUser]);
 
   // Listen to WebSocket typing events
   useEffect(() => {
     const unsub = wsService.on('chat:typing', (data: any) => {
-      if (data && data.chatId === targetChatId) {
+      if (data && (data.chatId === targetChatId || data.recipientId === currentUser?.id)) {
         setIsTyping(data.isTyping);
         if (data.senderName) setTypingUser(data.senderName);
       }
     });
 
     return () => unsub();
-  }, [targetChatId]);
+  }, [targetChatId, currentUser]);
 
   const handleSendText = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     if (!inputText.trim() || !chat) return;
 
-    const recipientId = chat.participant?.id;
+    const recipientId = chat.participant?.id || chat.participant?.customId;
+    const senderId = currentUser?.id || currentUser?.customId;
     const tempId = 'temp_' + Date.now();
 
-    // Direct WebSocket payload for live server delivery
     const socketPayload = {
       chatId: targetChatId,
       recipientId: recipientId,
-      senderId: currentUser?.id,
+      senderId: senderId,
       content: inputText.trim(),
       type: 'text',
       tempId: tempId,
     };
 
+    // Send via live websocket service
     wsService.send('chat:send_message', socketPayload);
 
     const newMsg: Partial<Message> = {
@@ -122,7 +139,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       type: 'text',
       content: inputText.trim(),
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sending',
+      status: 'sent', // Set to sent directly so timer doesn't hang
     };
 
     onSendMessage(newMsg);
@@ -156,12 +173,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     }
 
     const tempId = 'temp_voice_' + Date.now();
-    const recipientId = chat.participant?.id;
+    const recipientId = chat.participant?.id || chat.participant?.customId;
+    const senderId = currentUser?.id || currentUser?.customId;
 
     wsService.send('chat:send_message', {
       chatId: targetChatId,
       recipientId: recipientId,
-      senderId: currentUser?.id,
+      senderId: senderId,
       content: `Voice message (${duration}s)`,
       type: 'voice',
       tempId: tempId,
@@ -176,7 +194,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       type: 'voice',
       content: `Voice message (${duration}s)`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sending',
+      status: 'sent',
       voice: { duration, waveform },
     };
 
@@ -216,7 +234,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     if (!chat) return;
     setShowAttachmentMenu(false);
     const tempId = 'temp_media_' + Date.now();
-    const recipientId = chat.participant?.id;
+    const recipientId = chat.participant?.id || chat.participant?.customId;
+    const senderId = currentUser?.id || currentUser?.customId;
 
     if (type === 'image') {
       const mediaObj = {
@@ -230,7 +249,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       wsService.send('chat:send_message', {
         chatId: targetChatId,
         recipientId: recipientId,
-        senderId: currentUser?.id,
+        senderId: senderId,
         content: 'Sent an encrypted photo',
         type: 'image',
         tempId: tempId,
@@ -245,7 +264,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         type: 'image',
         content: 'Sent an encrypted photo',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'sending',
+        status: 'sent',
         media: mediaObj,
       };
       onSendMessage(imgMsg);
@@ -261,7 +280,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       wsService.send('chat:send_message', {
         chatId: targetChatId,
         recipientId: recipientId,
-        senderId: currentUser?.id,
+        senderId: senderId,
         content: 'offshore_routing_mesh.pdf',
         type: 'file',
         tempId: tempId,
@@ -276,7 +295,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         type: 'file',
         content: 'offshore_routing_mesh.pdf',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'sending',
+        status: 'sent',
         media: mediaObj,
       };
       onSendMessage(docMsg);
@@ -511,7 +530,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
         {messages.map((msg) => {
           if (!msg) return null;
-          const isMe = currentUser && msg.senderId === currentUser.id;
+          const isMe = currentUser && (msg.senderId === currentUser.id || msg.senderId === currentUser.customId);
           const isSystem = msg.type === 'system';
 
           if (isSystem) {
@@ -838,9 +857,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   setInputText(e.target.value);
                   wsService.emit('chat:typing', {
                     chatId: targetChatId,
-                    recipientId: chat.participant?.id,
+                    recipientId: chat.participant?.id || chat.participant?.customId,
                     isTyping: e.target.value.length > 0,
                     senderCustomId: currentUser?.customId,
+                    senderName: currentUser?.displayName,
                   });
                 }}
                 placeholder={chat.isGroup ? `Message ${chat.groupName}...` : 'Type an encrypted message...'}
