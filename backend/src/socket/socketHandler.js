@@ -77,12 +77,12 @@ const initSocket = (io) => {
     });
 
     /**
-     * 2. REAL-TIME MESSAGE TRANSMISSION (Robust Direct & Room Delivery)
+     * 2. REAL-TIME MESSAGE TRANSMISSION (Fixed recipient lookup & chat joining)
      */
     socket.on('chat:send_message', async (data) => {
       try {
         const chatId = data?.chatId || data?.message?.chatId;
-        const recipientId = data?.recipientId || data?.message?.recipientId;
+        let recipientId = data?.recipientId || data?.message?.recipientId;
         const senderId = data?.senderId || data?.message?.senderId;
         const content = data?.content || data?.message?.content;
         const type = data?.type || data?.message?.type || 'text';
@@ -101,19 +101,20 @@ const initSocket = (io) => {
           return;
         }
 
+        // Automatic recipient extraction from chatId if recipientId is missing
         let recipient = null;
         if (recipientId) {
           recipient = await User.findById(recipientId);
-        } else if (chatId && !chatId.startsWith('chat_') && chatId.includes('_')) {
-          // Fallback: chatId deterministic format me hai (e.g., "user1_user2")
+        } else if (chatId && chatId.includes('_')) {
           const parts = chatId.split('_');
           const otherUserId = parts.find(id => id !== senderId.toString());
           if (otherUserId) {
             recipient = await User.findById(otherUserId);
+            recipientId = otherUserId;
           }
         }
 
-        // Persist message in MongoDB
+        // Persist message in MongoDB with correct recipient ID
         const newMessage = await Message.create({
           chatId,
           sender: sender._id,
@@ -128,7 +129,7 @@ const initSocket = (io) => {
           media: media || null,
         });
 
-        // Acknowledge sender
+        // Acknowledge sender immediately
         socket.emit('chat:message_acknowledged', {
           tempId: tempId,
           message: newMessage,
@@ -151,7 +152,7 @@ const initSocket = (io) => {
           });
         }
 
-        // Also broadcast to any active socket room listeners
+        // Broadcast to chat room listeners as well
         socket.to(`chat:${chatId}`).emit('chat:new_message', newMessage);
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : String(err);
@@ -189,22 +190,24 @@ const initSocket = (io) => {
     });
 
     /**
-     * 4. TYPING INDICATORS
+     * 4. TYPING INDICATORS (Fixed sender name passing)
      */
     socket.on('chat:typing', (data) => {
       try {
-        const { chatId, recipientId, isTyping, senderCustomId } = data || {};
+        const { chatId, recipientId, isTyping, senderCustomId, senderName } = data || {};
         if (recipientId) {
           io.to(`user:${recipientId.toString()}`).emit('chat:typing', {
             chatId,
             isTyping,
             senderCustomId,
+            senderName,
           });
         } else if (chatId) {
           socket.to(`chat:${chatId}`).emit('chat:typing', {
             chatId,
             isTyping,
             senderCustomId,
+            senderName,
           });
         }
       } catch (e) {}
