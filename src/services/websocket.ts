@@ -153,6 +153,12 @@ class WebSocketClient {
 
   public emit(event: string, payload: any) {
     if (!event) return;
+
+    // Live backend par automatically socket.emit bhej do agar chat event hai
+    if (this.isLiveBackend && this.socket && this.socket.connected && event.startsWith('chat:')) {
+      this.socket.emit(event, payload);
+    }
+
     const handlers = this.listeners.get(event);
     if (handlers) {
       handlers.forEach((h) => {
@@ -166,14 +172,13 @@ class WebSocketClient {
   }
 
   /**
-   * Send payload via live Socket.io (Automated bot replies completely removed)
+   * Send payload via live Socket.io
    */
   public send(event: string, payload: any) {
     if (!event) return;
     if (this.isLiveBackend && this.socket && this.socket.connected) {
       this.socket.emit(event, payload);
     } else {
-      // Local mode: Just update message status to delivered, NO FAKE BOT REPLIES
       if (event === 'chat:send_message' && payload) {
         const message = payload.message;
         if (message && message.id) {
