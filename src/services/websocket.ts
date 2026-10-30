@@ -59,7 +59,6 @@ class WebSocketClient {
           this.socket.disconnect();
         }
 
-        // Initialize real Socket.io client with robust polling/websocket support for Render
         this.socket = socketIO(this.socketUrl, {
           transports: ['websocket', 'polling'],
           timeout: 10000,
@@ -78,7 +77,6 @@ class WebSocketClient {
           this.isLiveBackend = true;
           console.log(`[ChatNova Socket.io] Connected successfully to live backend at ${this.socketUrl}`);
 
-          // Register identity immediately on connect
           if (this.currentUserId) {
             this.socket?.emit('auth:init', {
               userId: this.currentUserId,
@@ -90,7 +88,6 @@ class WebSocketClient {
           resolve(true);
         });
 
-        // Forward live backend events to internal listeners
         const forwardEvents = [
           'chat:new_message',
           'chat:message_acknowledged',
@@ -160,6 +157,11 @@ class WebSocketClient {
   public emit(event: string, payload: any) {
     if (!event) return;
 
+    // IMPORTANT: Agar chat ya user event hai, toh live socket ke zariye server ko bhej do
+    if (this.socket && this.socket.connected && (event.startsWith('chat:') || event.startsWith('user:'))) {
+      this.socket.emit(event, payload);
+    }
+
     const handlers = this.listeners.get(event);
     if (handlers) {
       handlers.forEach((h) => {
@@ -172,9 +174,6 @@ class WebSocketClient {
     }
   }
 
-  /**
-   * Send payload directly via live Socket.io to backend
-   */
   public send(event: string, payload: any) {
     if (!event) return;
     if (this.socket && this.socket.connected) {
