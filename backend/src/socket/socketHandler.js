@@ -8,8 +8,33 @@ const socketToUser = new Map(); // socketId -> userId
 const initSocket = (io) => {
   if (!io) return;
 
-  io.on('connection', (socket) => {
+  io.on('connection', async (socket) => {
     console.log(`[Socket.io] New client connected: ${socket.id}`);
+
+    // Automatically extract userId and customId from handshake auth if provided
+    try {
+      const handshakeAuth = socket.handshake?.auth || {};
+      let initialUserId = handshakeAuth.userId;
+      const initialCustomId = handshakeAuth.customId;
+
+      if (initialUserId) {
+        const user = await User.findById(initialUserId);
+        if (user && !user.isBanned) {
+          onlineUsers.set(initialUserId.toString(), { socketId: socket.id, customId: initialCustomId || user.customId });
+          socketToUser.set(socket.id, initialUserId.toString());
+
+          user.status = 'online';
+          user.currentSocketId = socket.id;
+          user.lastSeen = new Date();
+          await user.save();
+
+          socket.join(`user:${initialUserId.toString()}`);
+          console.log(`[Socket.io] Auto-authenticated user via handshake: ${user.customId} (${socket.id})`);
+        }
+      }
+    } catch (e) {
+      console.error('[Socket Handshake Auth Error]:', e);
+    }
 
     /**
      * 1. IDENTITY REGISTRATION / ONLINE PRESENCE
@@ -77,7 +102,7 @@ const initSocket = (io) => {
     });
 
     /**
-     * 2. REAL-TIME MESSAGE TRANSMISSION (Fixed recipient lookup & chat joining)
+     * 2. REAL-TIME MESSAGE TRANSMISSION
      */
     socket.on('chat:send_message', async (data) => {
       try {
@@ -190,7 +215,7 @@ const initSocket = (io) => {
     });
 
     /**
-     * 4. TYPING INDICATORS (Fixed sender name passing)
+     * 4. TYPING INDICATORS
      */
     socket.on('chat:typing', (data) => {
       try {
@@ -258,4 +283,4 @@ const initSocket = (io) => {
   });
 };
 
-module.exports = initSocket;
+model.exports = initSocket;
