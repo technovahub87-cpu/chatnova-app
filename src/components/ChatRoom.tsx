@@ -99,7 +99,23 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     if (e) e.preventDefault();
     if (!inputText.trim() || !chat) return;
 
+    const recipientId = chat.participant?.id;
+    const tempId = 'temp_' + Date.now();
+
+    // Direct WebSocket payload for live server delivery
+    const socketPayload = {
+      chatId: targetChatId,
+      recipientId: recipientId,
+      senderId: currentUser?.id,
+      content: inputText.trim(),
+      type: 'text',
+      tempId: tempId,
+    };
+
+    wsService.send('chat:send_message', socketPayload);
+
     const newMsg: Partial<Message> = {
+      id: tempId,
       chatId: targetChatId,
       senderId: currentUser?.id || 'usr_me',
       senderName: currentUser?.displayName || 'User',
@@ -139,7 +155,21 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       waveform.push(Math.floor(Math.random() * 70) + 25);
     }
 
+    const tempId = 'temp_voice_' + Date.now();
+    const recipientId = chat.participant?.id;
+
+    wsService.send('chat:send_message', {
+      chatId: targetChatId,
+      recipientId: recipientId,
+      senderId: currentUser?.id,
+      content: `Voice message (${duration}s)`,
+      type: 'voice',
+      tempId: tempId,
+      voice: { duration, waveform }
+    });
+
     const voiceMsg: Partial<Message> = {
+      id: tempId,
       chatId: targetChatId,
       senderId: currentUser?.id || 'usr_me',
       senderName: currentUser?.displayName || 'User',
@@ -147,10 +177,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       content: `Voice message (${duration}s)`,
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       status: 'sending',
-      voice: {
-        duration,
-        waveform,
-      },
+      voice: { duration, waveform },
     };
 
     onSendMessage(voiceMsg);
@@ -188,8 +215,30 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const handleSendMediaAttachment = (type: 'image' | 'file') => {
     if (!chat) return;
     setShowAttachmentMenu(false);
+    const tempId = 'temp_media_' + Date.now();
+    const recipientId = chat.participant?.id;
+
     if (type === 'image') {
+      const mediaObj = {
+        type: 'image' as const,
+        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
+        name: 'encrypted_payload_capture.png',
+        size: '1.8 MB',
+        encryptedHash: 'sha256-4b227777d4678d45e412347890abcdef',
+      };
+
+      wsService.send('chat:send_message', {
+        chatId: targetChatId,
+        recipientId: recipientId,
+        senderId: currentUser?.id,
+        content: 'Sent an encrypted photo',
+        type: 'image',
+        tempId: tempId,
+        media: mediaObj
+      });
+
       const imgMsg: Partial<Message> = {
+        id: tempId,
         chatId: targetChatId,
         senderId: currentUser?.id || 'usr_me',
         senderName: currentUser?.displayName || 'User',
@@ -197,17 +246,30 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         content: 'Sent an encrypted photo',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sending',
-        media: {
-          type: 'image',
-          url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-          name: 'encrypted_payload_capture.png',
-          size: '1.8 MB',
-          encryptedHash: 'sha256-4b227777d4678d45e412347890abcdef',
-        },
+        media: mediaObj,
       };
       onSendMessage(imgMsg);
     } else {
+      const mediaObj = {
+        type: 'file' as const,
+        url: '#',
+        name: 'offshore_routing_mesh.pdf',
+        size: '3.1 MB',
+        encryptedHash: 'sha256-a192837465b0c9d8e7f6a5b4c3d2e1f0',
+      };
+
+      wsService.send('chat:send_message', {
+        chatId: targetChatId,
+        recipientId: recipientId,
+        senderId: currentUser?.id,
+        content: 'offshore_routing_mesh.pdf',
+        type: 'file',
+        tempId: tempId,
+        media: mediaObj
+      });
+
       const docMsg: Partial<Message> = {
+        id: tempId,
         chatId: targetChatId,
         senderId: currentUser?.id || 'usr_me',
         senderName: currentUser?.displayName || 'User',
@@ -215,13 +277,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         content: 'offshore_routing_mesh.pdf',
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sending',
-        media: {
-          type: 'file',
-          url: '#',
-          name: 'offshore_routing_mesh.pdf',
-          size: '3.1 MB',
-          encryptedHash: 'sha256-a192837465b0c9d8e7f6a5b4c3d2e1f0',
-        },
+        media: mediaObj,
       };
       onSendMessage(docMsg);
     }
@@ -468,8 +524,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                       : 'bg-slate-100 border-slate-200 text-slate-700'
                   }`}
                 >
-                  <span className="font-semibold">{msg.content}</span>
-                  <span className="block text-[10px] text-slate-500 mt-0.5">{msg.timestamp}</span>
+                  <p>{msg.content}</p>
+                  <span className="text-[9px] opacity-70 block mt-0.5">{msg.timestamp}</span>
                 </div>
               </div>
             );
@@ -778,7 +834,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               <input
                 type="text"
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => {
+                  setInputText(e.target.value);
+                  wsService.emit('chat:typing', {
+                    chatId: targetChatId,
+                    recipientId: chat.participant?.id,
+                    isTyping: e.target.value.length > 0,
+                    senderCustomId: currentUser?.customId,
+                  });
+                }}
                 placeholder={chat.isGroup ? `Message ${chat.groupName}...` : 'Type an encrypted message...'}
                 className={`w-full rounded-full px-4 py-2.5 text-sm transition focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${
                   isDark
@@ -815,6 +879,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           isOpen={showSafetyModal}
           onClose={() => setShowSafetyModal(false)}
           participant={chat.participant}
+          currentUser={currentUser}
         />
       )}
 
