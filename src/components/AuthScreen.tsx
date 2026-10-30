@@ -18,6 +18,7 @@ import { generateFingerprint } from '../services/crypto';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
 import { authAPI, setAuthToken } from '../services/api';
+import { wsService } from '../services/websocket';
 
 interface AuthScreenProps {
   onLoginSuccess: (user: UserType) => void;
@@ -168,6 +169,11 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               setAuthToken(apiRes.data.token);
             }
             setIsVerifying(false);
+            // Connect socket immediately with live user data
+            wsService.connect({
+              userId: apiRes.data.user.id,
+              customId: apiRes.data.user.customId || cleanId,
+            });
             onLoginSuccess(apiRes.data.user);
             return;
           } else if (!apiRes.success && apiRes.message) {
@@ -213,6 +219,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             }
           } catch (e) {}
 
+          wsService.connect({
+            userId: newUser.id,
+            customId: newUser.customId || cleanId,
+          });
           onLoginSuccess(newUser);
         } else {
           const existingRecord = registeredUsersMap[cleanId];
@@ -234,6 +244,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
               setStep('credentials');
               return;
             }
+            wsService.connect({
+              userId: userToLog.id,
+              customId: userToLog.customId || cleanId,
+            });
             onLoginSuccess(userToLog);
           } else {
             setErrorMsg('Identity not found in secure enclave.');
