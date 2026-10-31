@@ -65,8 +65,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const { isDark } = useTheme();
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'calls' | 'settings'>('chats');
 
-  const [chats, setChats] = useState<Chat[]>(INITIAL_CHATS);
-  const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>(INITIAL_MESSAGES);
+  const [chats, setChats] = useState<Chat[]>(() => {
+    try {
+      const saved = localStorage.getItem('chatnova_user_chats_' + currentUser.id);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_CHATS;
+  });
+
+  const [messagesMap, setMessagesMap] = useState<{ [chatId: string]: Message[] }>(() => {
+    try {
+      const saved = localStorage.getItem('chatnova_user_msgs_' + currentUser.id);
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return INITIAL_MESSAGES;
+  });
+
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -92,6 +106,18 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [showLinkedDevicesModal, setShowLinkedDevicesModal] = useState(false);
   const [broadcastNotice, setBroadcastNotice] = useState<string | null>(null);
 
+  useEffect(() => {
+    try {
+      localStorage.setItem('chatnova_user_chats_' + currentUser.id, JSON.stringify(chats));
+    } catch (e) {}
+  }, [chats, currentUser.id]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem('chatnova_user_msgs_' + currentUser.id, JSON.stringify(messagesMap));
+    } catch (e) {}
+  }, [messagesMap, currentUser.id]);
+
   const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
@@ -109,29 +135,53 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   useEffect(() => {
-    const unsubMsg = wsService.on('chat:new_message', (newMsg: Message) => {
-      if (!newMsg || !newMsg.chatId) return;
+    const unsubMsg = wsService.on('chat:new_message', (newMsg: any) => {
+      if (!newMsg || !newMsg.content) return;
+      const cId = newMsg.chatId || [newMsg.senderId, currentUser.id].sort().join('_');
+
       setMessagesMap((prev) => {
-        const currentList = prev[newMsg.chatId] || [];
+        const currentList = prev[cId] || [];
         if (currentList.some((m) => m.id === newMsg.id)) return prev;
         return {
           ...prev,
-          [newMsg.chatId]: [...currentList, newMsg],
+          [cId]: [...currentList, { ...newMsg, chatId: cId, status: 'delivered' }],
         };
       });
 
-      setChats((prev) =>
-        prev.map((c) => {
-          if (c.id === newMsg.chatId) {
-            return {
-              ...c,
-              lastMessage: newMsg,
-              unreadCount: activeChatId === newMsg.chatId ? 0 : (c.unreadCount || 0) + 1,
-            };
-          }
-          return c;
-        })
-      );
+      setChats((prev) => {
+        const exists = prev.find((c) => c.id === cId);
+        if (exists) {
+          return prev.map((c) =>
+            c.id === cId
+              ? {
+                  ...c,
+                  lastMessage: { ...newMsg, chatId: cId },
+                  unreadCount: activeChatId === cId ? 0 : (c.unreadCount || 0) + 1,
+                }
+              : c
+          );
+        } else {
+          // Auto create chat entry if incoming from a new user
+          const senderUser: User = {
+            id: newMsg.senderId,
+            customId: newMsg.senderCustomId || '@user',
+            displayName: newMsg.senderName || 'User',
+            avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+            status: 'online',
+          };
+          const newChatEntry: Chat = {
+            id: cId,
+            participant: senderUser,
+            isGroup: false,
+            unreadCount: activeChatId === cId ? 0 : 1,
+            isPinned: false,
+            isMuted: false,
+            lastMessage: { ...newMsg, chatId: cId },
+            encryptionFingerprint: generateFingerprint(senderUser.id),
+          };
+          return [newChatEntry, ...prev];
+        }
+      });
     });
 
     const unsubStatus = wsService.on('chat:message_status', (data: any) => {
@@ -159,23 +209,23 @@ export const Dashboard: React.FC<DashboardProps> = ({
       unsubStatus();
       unsubBroadcast();
     };
-  }, [activeChatId]);
+  }, [activeChatId, currentUser.id]);
 
   const handleSendMessage = (msgData: Partial<Message>) => {
     if (!activeChatId) return;
 
     const currentChat = chats.find((c) => c.id === activeChatId);
-    const targetRecipientId = currentChat?.participant?.id;
+    const targetRecipientId = currentChat?.participant?.id || currentChat?.participant?.customId;
 
     const fullMsg: Message = {
-      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+      id: msgData.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
       chatId: activeChatId,
       senderId: currentUser?.id || 'usr_me',
       senderName: currentUser?.displayName || 'User',
       type: msgData.type || 'text',
       content: msgData.content || '',
       timestamp: msgData.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sending',
+      status: 'delivered',
       voice: msgData.voice,
       media: msgData.media,
     };
@@ -192,11 +242,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
     wsService.send('chat:send_message', {
       chatId: activeChatId,
       recipientId: targetRecipientId,
-      recipientName: currentChat?.participant?.displayName,
-      isGroup: currentChat?.isGroup,
-      groupName: currentChat?.groupName,
-      groupMembers: currentChat?.groupMembers,
-      message: fullMsg,
+      senderId: currentUser?.id,
+      senderCustomId: currentUser?.customId,
+      senderName: currentUser?.displayName,
+      content: fullMsg.content,
+      type: fullMsg.type,
+      tempId: fullMsg.id,
+      voice: fullMsg.voice,
+      media: fullMsg.media,
     });
   };
 
@@ -474,9 +527,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 <button
                   type="button"
                   onClick={onLogout}
-                  className={`w-full px-4 py-2.5 text-left text-rose-500 flex items-center gap-2.5 transition cursor-pointer ${
-                    isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
-                  }`}
+                  className="w-full px-4 py-2.5 text-left flex items-center gap-2.5 text-rose-500 hover:bg-rose-500/10 transition cursor-pointer font-semibold"
                 >
                   <LogOut className="w-4 h-4" />
                   <span>Log Out</span>
@@ -768,7 +819,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             onSendMessage={handleSendMessage}
             onBack={() => setActiveChatId(null)}
             onUpdateChat={handleUpdateChat}
-            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant, type })}
+            onStartCall={(type) => setActiveCall({ participant: selectedChat.participant!, type })}
           />
         ) : (
           <div className={`flex-1 flex flex-col items-center justify-center p-6 text-center select-none ${isDark ? 'bg-[#0b141a]' : 'bg-[#f8f9fa]'}`}>
