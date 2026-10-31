@@ -32,7 +32,6 @@ function AppContent() {
   }, []);
 
   useEffect(() => {
-    // FIX: Agar user pehle se logged in hai, toh socket connect karte waqt userId aur customId pass karo!
     try {
       if (currentUser && currentUser.id) {
         wsService.connect({
@@ -43,6 +42,17 @@ function AppContent() {
         wsService.connect();
       }
     } catch (e) {}
+
+    // Global incoming message relay listener
+    const handleGlobalIncomingMessage = (incomingMsg: any) => {
+      if (incomingMsg && incomingMsg.content) {
+        window.dispatchEvent(
+          new CustomEvent('chatnova:new_incoming_msg', { detail: incomingMsg })
+        );
+      }
+    };
+
+    const unsubscribeMsg = wsService.on('chat:new_message', handleGlobalIncomingMessage);
 
     try {
       const existingUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
@@ -92,7 +102,11 @@ function AppContent() {
 
     checkHashRoute();
     window.addEventListener('hashchange', checkHashRoute);
-    return () => window.removeEventListener('hashchange', checkHashRoute);
+    
+    return () => {
+      window.removeEventListener('hashchange', checkHashRoute);
+      unsubscribeMsg();
+    };
   }, [currentUser]);
 
   const handleLoginSuccess = (user: User) => {
@@ -100,7 +114,6 @@ function AppContent() {
     setCurrentUser(user);
     try {
       localStorage.setItem('chatnova_current_user', JSON.stringify(user));
-      // FIX: Login hote hi socket ko authenticate karo taaki backend ko pata chale kaun online aaya hai
       wsService.connect({
         userId: user.id,
         customId: user.customId || '',
