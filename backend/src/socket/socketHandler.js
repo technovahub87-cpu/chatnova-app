@@ -6,22 +6,28 @@ module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
+    // Register user socket mapping
     socket.on('auth:init', (data) => {
       if (data && (data.userId || data.customId)) {
         onlineUsers.set(data.userId, socket.id);
+        onlineUsers.set(String(data.userId), socket.id);
         if (data.customId) {
           onlineUsers.set(data.customId.toLowerCase(), socket.id);
+          onlineUsers.set(data.customId, socket.id);
         }
+        socket.join(data.userId);
+        if (data.customId) socket.join(data.customId);
+        console.log(`User authenticated & joined rooms: ${data.customId || data.userId}`);
       }
     });
 
     socket.on('chat:join', (chatId) => {
-      socket.join(chatId);
+      if (chatId) socket.join(chatId);
     });
 
     socket.on('chat:send_message', async (data) => {
       try {
-        // 1. Save message to MongoDB database for permanent persistence
+        // Save message to MongoDB database
         const newMessage = new Message({
           chatId: data.chatId,
           senderId: data.senderId,
@@ -51,20 +57,26 @@ module.exports = (io) => {
           timestamp: newMessage.timestamp,
         };
 
+        // 1. Send to recipient socket directly if mapped
+        if (data.recipientId) {
+          const recipientSocketId = onlineUsers.get(data.recipientId) || onlineUsers.get(String(data.recipientId).toLowerCase());
+          if (recipientSocketId) {
+            io.to(recipientSocketId).emit('chat:new_message', payload);
+          }
+          // Also emit to recipient's room
+          io.to(data.recipientId).emit('chat:new_message', payload);
+        }
+
         // 2. Broadcast to chat room
         if (data.chatId) {
           socket.to(data.chatId).emit('chat:new_message', payload);
         }
 
-        // 3. Direct recipient fallback delivery
-        if (data.recipientId) {
-          const recipientSocketId = onlineUsers.get(data.recipientId);
-          if (recipientSocketId) {
-            io.to(recipientSocketId).emit('chat:new_message', payload);
-          }
-        }
+        // 3. Global safety broadcast so both users see it instantly
+        socket.broadcast.emit('chat:new_message', payload);
+
       } catch (err) {
-        console.error('Error saving message to MongoDB:', err);
+        console.error('Error in chat:send_message:', err);
       }
     });
 
@@ -81,6 +93,7 @@ module.exports = (io) => {
           break;
         }
       }
+      console.log('User disconnected:', socket.id);
     });
   });
 };
