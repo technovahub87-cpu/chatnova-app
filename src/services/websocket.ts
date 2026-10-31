@@ -1,5 +1,5 @@
 /**
- * ChatNova Robust Hybrid WebSocket Client (Live + Local Simulation Fallback)
+ * ChatNova Clean Production WebSocket Client (Zero Echo / Pure Socket.io)
  */
 import { io as socketIO, Socket } from 'socket.io-client';
 import { getAuthToken } from './api';
@@ -11,40 +11,15 @@ class WebSocketClient {
   private socket: Socket | null = null;
   private listeners: Map<string, Set<EventHandler>> = new Map();
   private isConnected: boolean = false;
-  private isLiveBackend: boolean = false;
-  private currentUserId: string | null = null;
-  private currentCustomId: string | null = null;
-  private messageQueue: any[] = [];
-
-  constructor() {
-    // Listen to cross-tab storage events for local multi-browser real-time sync simulation
-    window.addEventListener('storage', (event) => {
-      if (event.key === 'chatnova_latest_broadcast' && event.newValue) {
-        try {
-          const packet = JSON.parse(event.newValue);
-          if (packet && packet.event && packet.data) {
-            this.triggerLocalListeners(packet.event, packet.data);
-          }
-        } catch (e) {}
-      }
-    });
-  }
 
   public getStatus() {
     return {
-      connected: true, // Always true in hybrid mode so messages never get stuck
-      isLiveBackend: this.isLiveBackend,
+      connected: this.isConnected,
       url: this.socketUrl,
-      gateway: this.isLiveBackend ? 'Live Render Socket.io' : 'Hybrid Local Real-time Relay',
     };
   }
 
   public connect(authData?: { userId: string; customId: string }): Promise<boolean> {
-    if (authData) {
-      this.currentUserId = authData.userId;
-      this.currentCustomId = authData.customId;
-    }
-
     return new Promise((resolve) => {
       try {
         const token = getAuthToken();
@@ -55,63 +30,45 @@ class WebSocketClient {
 
         this.socket = socketIO(this.socketUrl, {
           transports: ['websocket', 'polling'],
-          timeout: 4000,
-          reconnection: true,
-          reconnectionAttempts: 3,
-          auth: { token, userId: this.currentUserId, customId: this.currentCustomId },
+          auth: { token, ...(authData || {}) },
         });
 
         this.socket.on('connect', () => {
           this.isConnected = true;
-          this.isLiveBackend = true;
-          console.log('[ChatNova Socket.io] Connected successfully to live backend');
-          
-          if (this.currentUserId) {
-            this.socket?.emit('auth:init', {
-              userId: this.currentUserId,
-              customId: this.currentCustomId,
-            });
-          }
+          console.log('[ChatNova Socket] Connected successfully');
           resolve(true);
         });
 
-        const forwardEvents = [
+        const events = [
           'chat:new_message',
           'chat:message_acknowledged',
           'chat:message_status',
-          'chat:read_receipt',
           'chat:typing',
         ];
 
-        forwardEvents.forEach((ev) => {
+        events.forEach((ev) => {
           this.socket?.on(ev, (data) => {
-            this.triggerLocalListeners(ev, data);
+            this.notifyListeners(ev, data);
           });
         });
 
         this.socket.on('connect_error', () => {
-          this.isConnected = true; // Fallback active
-          this.isLiveBackend = false;
-          // Silently fallback to local simulation without breaking UI
-          resolve(true);
+          this.isConnected = false;
+          resolve(false);
         });
       } catch (err) {
-        this.isConnected = true;
-        this.isLiveBackend = false;
-        resolve(true);
+        this.isConnected = false;
+        resolve(false);
       }
     });
   }
 
   public disconnect() {
-    try {
-      if (this.socket) {
-        this.socket.disconnect();
-        this.socket = null;
-      }
-    } catch (e) {}
+    if (this.socket) {
+      this.socket.disconnect();
+      this.socket = null;
+    }
     this.isConnected = false;
-    this.isLiveBackend = false;
   }
 
   public on(event: string, handler: EventHandler) {
@@ -128,7 +85,7 @@ class WebSocketClient {
     this.listeners.get(event)?.delete(handler);
   }
 
-  private triggerLocalListeners(event: string, payload: any) {
+  private notifyListeners(event: string, payload: any) {
     const handlers = this.listeners.get(event);
     if (handlers) {
       handlers.forEach((h) => {
@@ -141,21 +98,8 @@ class WebSocketClient {
 
   public emit(event: string, payload: any) {
     if (!event) return;
-
-    if (this.socket && this.socket.connected && this.isLiveBackend) {
+    if (this.socket && this.socket.connected) {
       this.socket.emit(event, payload);
-    }
-
-    // Always trigger local listeners and cross-tab sync to ensure instant delivery
-    this.triggerLocalListeners(event, payload);
-
-    if (event === 'chat:send_message' || event.startsWith('chat:')) {
-      try {
-        localStorage.setItem(
-          'chatnova_latest_broadcast',
-          JSON.stringify({ event, data: payload, timestamp: Date.now() })
-        );
-      } catch (e) {}
     }
   }
 
