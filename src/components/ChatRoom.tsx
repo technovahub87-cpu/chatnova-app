@@ -88,8 +88,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     }
 
     const unsubMessage = wsService.on('chat:new_message', (incomingMsg: any) => {
-      if (incomingMsg && incomingMsg.content && (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id)) {
-        if (incomingMsg.senderId !== currentUser?.id && incomingMsg.senderId !== currentUser?.customId) {
+      if (incomingMsg && incomingMsg.content) {
+        if (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id || incomingMsg.senderId !== currentUser?.id) {
           onSendMessage({
             ...incomingMsg,
             senderName: incomingMsg.senderName || chat.participant?.displayName || 'User',
@@ -98,6 +98,20 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         }
       }
     });
+
+    const handleWindowIncoming = (e: any) => {
+      const incomingMsg = e.detail;
+      if (incomingMsg && incomingMsg.content) {
+        if (incomingMsg.chatId === targetChatId || incomingMsg.recipientId === currentUser?.id) {
+          onSendMessage({
+            ...incomingMsg,
+            status: 'delivered',
+          });
+        }
+      }
+    };
+
+    window.addEventListener('chatnova:new_incoming_msg', handleWindowIncoming as EventListener);
 
     const unsubTyping = wsService.on('chat:typing', (data: any) => {
       if (data && data.chatId === targetChatId && data.senderCustomId !== currentUser?.customId) {
@@ -109,6 +123,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     return () => {
       unsubMessage();
       unsubTyping();
+      window.removeEventListener('chatnova:new_incoming_msg', handleWindowIncoming as EventListener);
     };
   }, [targetChatId, currentUser, chat, onSendMessage]);
 
