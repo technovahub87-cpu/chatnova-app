@@ -1,50 +1,71 @@
+const Message = require('../models/Message');
+
 const onlineUsers = new Map();
 
 module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('User connected:', socket.id);
 
-    // Register user socket mapping for direct delivery
     socket.on('auth:init', (data) => {
       if (data && (data.userId || data.customId)) {
         onlineUsers.set(data.userId, socket.id);
         if (data.customId) {
           onlineUsers.set(data.customId.toLowerCase(), socket.id);
         }
-        console.log(`User authenticated on socket: ${socket.id} -> ${data.customId || data.userId}`);
       }
     });
 
     socket.on('chat:join', (chatId) => {
       socket.join(chatId);
-      console.log(`Socket ${socket.id} joined room: ${chatId}`);
     });
 
-    socket.on('chat:send_message', (data) => {
-      console.log('Message relayed on server:', data);
-      
-      const payload = {
-        ...data,
-        id: data.tempId || 'msg_' + Date.now(),
-        status: 'delivered',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      };
+    socket.on('chat:send_message', async (data) => {
+      try {
+        // 1. Save message to MongoDB database for permanent persistence
+        const newMessage = new Message({
+          chatId: data.chatId,
+          senderId: data.senderId,
+          senderName: data.senderName,
+          recipientId: data.recipientId,
+          content: data.content,
+          type: data.type || 'text',
+          media: data.media || null,
+          voice: data.voice || null,
+          status: 'delivered',
+          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        });
 
-      // 1. Broadcast to specific chat room
-      if (data.chatId) {
-        socket.to(data.chatId).emit('chat:new_message', payload);
-      }
+        await newMessage.save();
 
-      // 2. Direct recipient fallback delivery if online
-      if (data.recipientId) {
-        const recipientSocketId = onlineUsers.get(data.recipientId);
-        if (recipientSocketId) {
-          io.to(recipientSocketId).emit('chat:new_message', payload);
+        const payload = {
+          id: newMessage._id,
+          chatId: newMessage.chatId,
+          senderId: newMessage.senderId,
+          senderName: newMessage.senderName,
+          recipientId: newMessage.recipientId,
+          content: newMessage.content,
+          type: newMessage.type,
+          media: newMessage.media,
+          voice: newMessage.voice,
+          status: newMessage.status,
+          timestamp: newMessage.timestamp,
+        };
+
+        // 2. Broadcast to chat room
+        if (data.chatId) {
+          socket.to(data.chatId).emit('chat:new_message', payload);
         }
-      }
 
-      // 3. Global fallback to ensure cross-browser delivery during testing
-      socket.broadcast.emit('chat:new_message', payload);
+        // 3. Direct recipient fallback delivery
+        if (data.recipientId) {
+          const recipientSocketId = onlineUsers.get(data.recipientId);
+          if (recipientSocketId) {
+            io.to(recipientSocketId).emit('chat:new_message', payload);
+          }
+        }
+      } catch (err) {
+        console.error('Error saving message to MongoDB:', err);
+      }
     });
 
     socket.on('chat:typing', (data) => {
@@ -60,7 +81,6 @@ module.exports = (io) => {
           break;
         }
       }
-      console.log('User disconnected:', socket.id);
     });
   });
 };
