@@ -6,27 +6,30 @@ module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('User connected with socket ID:', socket.id);
 
+    // Helper to map both userId and customId to this socket
+    const registerUserMapping = (authData) => {
+      if (!authData) return;
+      const { userId, customId } = authData;
+      if (userId) {
+        onlineUsers.set(String(userId), socket.id);
+        onlineUsers.set(String(userId).toLowerCase(), socket.id);
+        socket.join(String(userId));
+      }
+      if (customId) {
+        const formattedCustom = customId.startsWith('@') ? customId : `@${customId}`;
+        onlineUsers.set(String(formattedCustom), socket.id);
+        onlineUsers.set(String(formattedCustom).toLowerCase(), socket.id);
+        socket.join(String(formattedCustom));
+      }
+    };
+
     // Extract auth data from handshake auth or query if available
-    const initialAuth = socket.handshake.auth || socket.handshake.query;
-    if (initialAuth && (initialAuth.userId || initialAuth.customId)) {
-      const uId = initialAuth.userId || initialAuth.customId;
-      onlineUsers.set(String(uId), socket.id);
-      onlineUsers.set(String(uId).toLowerCase(), socket.id);
-      socket.join(String(uId));
-      console.log(`Auto-Authenticated via handshake: ${uId} -> ${socket.id}`);
-    }
+    registerUserMapping(socket.handshake.auth || socket.handshake.query);
 
     // User authentication and mapping event
     socket.on('auth:init', (data) => {
-      if (data) {
-        const uId = data.userId || data.customId;
-        if (uId) {
-          onlineUsers.set(String(uId), socket.id);
-          onlineUsers.set(String(uId).toLowerCase(), socket.id);
-          socket.join(String(uId));
-          console.log(`Authenticated user mapped: ${uId} -> ${socket.id}`);
-        }
-      }
+      registerUserMapping(data);
+      console.log(`Authenticated user socket mapped for ID: ${socket.id}`);
     });
 
     // Join specific chat room
@@ -43,6 +46,7 @@ module.exports = (io) => {
         const chatId = data.chatId;
         const senderId = data.senderId;
         const recipientId = data.recipientId;
+        const senderCustomId = data.senderCustomId;
 
         // 1. Save message to MongoDB permanently
         const newMessage = new Message({
@@ -64,6 +68,7 @@ module.exports = (io) => {
           id: newMessage._id || data.tempId,
           chatId: newMessage.chatId,
           senderId: newMessage.senderId,
+          senderCustomId: senderCustomId,
           senderName: newMessage.senderName,
           recipientId: newMessage.recipientId,
           content: newMessage.content,
@@ -74,27 +79,30 @@ module.exports = (io) => {
           timestamp: newMessage.timestamp,
         };
 
-        // 2. Deliver to recipient socket if online
+        // 2. Deliver to chat room participants (Ensures both sender and receiver get it instantly)
+        if (chatId) {
+          io.to(chatId).emit('chat:new_message', payload);
+          console.log(`[Socket Broadcast] Emitted to chat room: ${chatId}`);
+        }
+
+        // 3. Fallback direct delivery to recipient if online via ID or Custom ID
         if (recipientId) {
-          const recipientSocketId = onlineUsers.get(String(recipientId)) || onlineUsers.get(String(recipientId).toLowerCase());
+          const cleanRecipient = String(recipientId).trim();
+          const recipientSocketId = 
+            onlineUsers.get(cleanRecipient) || 
+            onlineUsers.get(cleanRecipient.toLowerCase()) ||
+            onlineUsers.get(cleanRecipient.startsWith('@') ? cleanRecipient : `@${cleanRecipient}`);
+
           if (recipientSocketId) {
             io.to(recipientSocketId).emit('chat:new_message', payload);
-            console.log(`Delivered to recipient socket: ${recipientSocketId}`);
+            console.log(`Delivered directly to recipient socket: ${recipientSocketId}`);
           }
-          // Also emit to recipient's personal room (guaranteed delivery if joined)
-          io.to(String(recipientId)).emit('chat:new_message', payload);
+          io.to(cleanRecipient).emit('chat:new_message', payload);
         }
 
-        // 3. Emit to chat room (so both participants in room get it)
-        if (chatId) {
-          socket.to(chatId).emit('chat:new_message', payload);
-        }
-
-        // 4. Send back confirmation/echo to sender as well if needed, or broadcast fallback
+        // Send confirmation back to sender socket
         socket.emit('chat:message_sent', payload);
-        socket.broadcast.emit('chat:new_message', payload);
-
-        console.log(`[Message Sent] From ${senderId} to ${recipientId || chatId}`);
+        console.log(`[Message Successfully Processed] From ${senderId} to ${recipientId || chatId}`);
 
       } catch (err) {
         console.error('Error saving or sending message:', err);
@@ -113,7 +121,6 @@ module.exports = (io) => {
       for (let [key, val] of onlineUsers.entries()) {
         if (val === socket.id) {
           onlineUsers.delete(key);
-          break;
         }
       }
       console.log('User disconnected socket ID:', socket.id);
