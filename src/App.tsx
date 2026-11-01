@@ -31,6 +31,7 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Stabilized socket connection effect keyed strictly by user id
   useEffect(() => {
     try {
       if (currentUser && currentUser.id) {
@@ -42,17 +43,6 @@ function AppContent() {
         wsService.connect();
       }
     } catch (e) {}
-
-    // Global incoming message relay listener
-    const handleGlobalIncomingMessage = (incomingMsg: any) => {
-      if (incomingMsg && incomingMsg.content) {
-        window.dispatchEvent(
-          new CustomEvent('chatnova:new_incoming_msg', { detail: incomingMsg })
-        );
-      }
-    };
-
-    const unsubscribeMsg = wsService.on('chat:new_message', handleGlobalIncomingMessage);
 
     try {
       const existingUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
@@ -105,9 +95,8 @@ function AppContent() {
     
     return () => {
       window.removeEventListener('hashchange', checkHashRoute);
-      unsubscribeMsg();
     };
-  }, [currentUser]);
+  }, [currentUser?.id]);
 
   const handleLoginSuccess = (user: User) => {
     if (!user || !user.id) return;
