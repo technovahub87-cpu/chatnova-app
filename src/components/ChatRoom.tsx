@@ -1,1232 +1,285 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft,
-  Phone,
-  Video,
-  Shield,
-  Lock,
+  Send,
   Paperclip,
   Mic,
-  Send,
-  Check,
-  CheckCheck,
+  Square,
   Play,
   Pause,
+  Trash2,
+  Lock,
+  CheckCheck,
+  MoreVertical,
+  Phone,
+  Video,
+  Info,
+  Smile,
   FileText,
   Image as ImageIcon,
-  Clock,
-  Trash2,
-  Users,
-  Info
+  X
 } from 'lucide-react';
 import { Chat, Message, User } from '../types';
-import { SafetyNumberModal } from './SafetyNumberModal';
-import { GroupInfoModal } from './GroupInfoModal';
 import { wsService } from '../services/websocket';
 import { useTheme } from '../context/ThemeContext';
-import { ThemeToggle } from './ThemeToggle';
 
 interface ChatRoomProps {
   chat: Chat;
   currentUser: User;
   messages: Message[];
+  onSendMessage: (msgData: Partial<Message>) => void;
   onBack: () => void;
-  onSendMessage: (msg: Partial<Message>) => void;
+  onUpdateChat: (updatedChat: Chat) => void;
   onStartCall: (type: 'voice' | 'video') => void;
-  onUpdateChat?: (updatedChat: Chat) => void;
 }
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   chat,
   currentUser,
   messages,
-  onBack,
   onSendMessage,
-  onStartCall,
+  onBack,
   onUpdateChat,
+  onStartCall,
 }) => {
   const { isDark } = useTheme();
   const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState('');
-  const [showSafetyModal, setShowSafetyModal] = useState(false);
-  const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
-  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-
-  const getDeterministicChatId = () => {
-    if (chat.isGroup) return chat.id;
-    if (chat.participant && currentUser) {
-      const id1 = currentUser.id || currentUser.customId;
-      const id2 = chat.participant.id || chat.participant.customId;
-      if (id1 && id2) {
-        return [id1, id2].sort().join('_');
-      }
-    }
-    return chat.id || 'chat_default';
-  };
-
-  const targetChatId = getDeterministicChatId();
-
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
+  const [showChatMenu, setShowChatMenu] = useState(false);
+  const [showInfoModal, setShowInfoModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [voiceProgress, setVoiceProgress] = useState<{ [id: string]: number }>({});
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const recordingTimerRef = useRef<any>(null);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recordingTimerRef = useRef<any>(null);
-  const playbackTimerRef = useRef<any>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
+  const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
+  };
 
   useEffect(() => {
-    if (targetChatId) {
-      wsService.emit('chat:join', targetChatId);
-    }
+    scrollToBottom();
+  }, [messages]);
 
-    // ONLY listen to typing indicators here. Dashboard handles new_message globally to prevent loops.
-    const unsubTyping = wsService.on('chat:typing', (data: any) => {
-      if (data && data.chatId === targetChatId && data.senderCustomId !== currentUser?.customId) {
-        setIsTyping(data.isTyping);
-        if (data.senderName) setTypingUser(data.senderName);
-      }
+  // Join deterministic chat room on socket
+  useEffect(() => {
+    if (chat && chat.id) {
+      wsService.emit('chat:join', chat.id);
+    }
+  }, [chat?.id]);
+
+  const handleSend = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (!inputText.trim()) return;
+
+    onSendMessage({
+      content: inputText.trim(),
+      type: 'text',
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
     });
 
-    return () => {
-      unsubTyping();
-    };
-  }, [targetChatId, currentUser]);
-
-  const handleSendText = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputText.trim() || !chat) return;
-
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-    const tempId = 'temp_' + Date.now();
-
-    const socketPayload = {
-      chatId: targetChatId,
-      recipientId: recipientId,
-      senderId: senderId,
-      senderName: currentUser?.displayName || 'User',
-      content: inputText.trim(),
-      type: 'text',
-      tempId: tempId,
-    };
-
-    wsService.send('chat:send_message', socketPayload);
-
-    const newMsg: Partial<Message> = {
-      id: tempId,
-      chatId: targetChatId,
-      senderId: currentUser?.id || 'usr_me',
-      senderName: currentUser?.displayName || 'User',
-      type: 'text',
-      content: inputText.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'delivered',
-    };
-
-    onSendMessage(newMsg);
     setInputText('');
-    setShowAttachmentMenu(false);
+  };
+
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'image' | 'document') => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onloadend = () => {
+      const base64String = reader.result as string;
+      onSendMessage({
+        content: file.name,
+        type: type,
+        media: {
+          url: base64String,
+          name: file.name,
+          size: `${(file.size / 1024).toFixed(1)} KB`,
+        },
+        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      });
+    };
+    reader.readAsDataURL(file);
+    setShowAttachMenu(false);
   };
 
   const startRecording = () => {
     setIsRecording(true);
-    setRecordingSeconds(0);
+    setRecordingDuration(0);
     recordingTimerRef.current = setInterval(() => {
-      setRecordingSeconds((s) => s + 1);
+      setRecordingDuration((prev) => prev + 1);
     }, 1000);
   };
 
-  const cancelRecording = () => {
-    setIsRecording(false);
-    setRecordingSeconds(0);
+  const stopAndSendRecording = () => {
     clearInterval(recordingTimerRef.current);
-  };
-
-  const sendVoiceNote = () => {
-    if (!chat) return;
     setIsRecording(false);
-    clearInterval(recordingTimerRef.current);
-    const duration = Math.max(recordingSeconds, 3);
 
-    const waveform: number[] = [];
-    for (let i = 0; i < 20; i++) {
-      waveform.push(Math.floor(Math.random() * 70) + 25);
-    }
+    const mins = Math.floor(recordingDuration / 60);
+    const secs = recordingDuration % 60;
+    const durationStr = `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 
-    const tempId = 'temp_voice_' + Date.now();
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-
-    wsService.send('chat:send_message', {
-      chatId: targetChatId,
-      recipientId: recipientId,
-      senderId: senderId,
-      senderName: currentUser?.displayName || 'User',
-      content: `Voice message (${duration}s)`,
+    onSendMessage({
+      content: `Voice message (${durationStr})`,
       type: 'voice',
-      tempId: tempId,
-      voice: { duration, waveform }
-    });
-
-    const voiceMsg: Partial<Message> = {
-      id: tempId,
-      chatId: targetChatId,
-      senderId: currentUser?.id || 'usr_me',
-      senderName: currentUser?.displayName || 'User',
-      type: 'voice',
-      content: `Voice message (${duration}s)`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'delivered',
-      voice: { duration, waveform },
-    };
-
-    onSendMessage(voiceMsg);
-    setRecordingSeconds(0);
-  };
-
-  const togglePlayVoice = (msgId: string, duration: number) => {
-    if (playingVoiceId === msgId) {
-      clearInterval(playbackTimerRef.current);
-      setPlayingVoiceId(null);
-    } else {
-      clearInterval(playbackTimerRef.current);
-      setPlayingVoiceId(msgId);
-
-      playbackTimerRef.current = setInterval(() => {
-        setVoiceProgress((prev) => {
-          const current = prev[msgId] || 0;
-          if (current >= 100) {
-            clearInterval(playbackTimerRef.current);
-            setPlayingVoiceId(null);
-            return { ...prev, [msgId]: 0 };
-          }
-          return { ...prev, [msgId]: current + (100 / (duration * 10)) * playbackSpeed };
-        });
-      }, 100);
-    }
-  };
-
-  const cycleSpeed = () => {
-    if (playbackSpeed === 1) setPlaybackSpeed(1.5);
-    else if (playbackSpeed === 1.5) setPlaybackSpeed(2);
-    else setPlaybackSpeed(1);
-  };
-
-  const handleSendMediaAttachment = (type: 'image' | 'file') => {
-    if (!chat) return;
-    setShowAttachmentMenu(false);
-    const tempId = 'temp_media_' + Date.now();
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-
-    if (type === 'image') {
-      const mediaObj = {
-        type: 'image' as const,
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-        name: 'encrypted_payload_capture.png',
-        size: '1.8 MB',
-        encryptedHash: 'sha256-4b227777d4678d45e412347890abcdef',
-      };
-
-      wsService.send('chat:send_message', {
-        chatId: targetChatId,
-        recipientId: recipientId,
-        senderId: senderId,
-        senderName: currentUser?.displayName || 'User',
-        content: 'Sent an encrypted photo',
-        type: 'image',
-        tempId: tempId,
-        media: mediaObj
-      });
-
-      const imgMsg: Partial<Message> = {
-        id: tempId,
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'image',
-        content: 'Sent an encrypted photo',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered',
-        media: mediaObj,
-      };
-      onSendMessage(imgMsg);
-    } else {
-      const mediaObj = {
-        type: 'file' as const,
-        url: '#',
-        name: 'offshore_routing_mesh.pdf',
-        size: '3.1 MB',
-        encryptedHash: 'sha256-a192837465b0c9d8e7f6a5b4c3d2e1f0',
-      };
-
-      wsService.send('chat:send_message', {
-        chatId: targetChatId,
-        recipientId: recipientId,
-        senderId: senderId,
-        senderName: currentUser?.displayName || 'User',
-        content: 'offshore_routing_mesh.pdf',
-        type: 'file',
-        tempId: tempId,
-        media: mediaObj
-      });
-
-      const docMsg: Partial<Message> = {
-        id: tempId,
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'file',
-        content: 'offshore_routing_mesh.pdf',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered',
-        media: mediaObj,
-      };
-      onSendMessage(docMsg);
-    }
-  };
-
-  const formatSecs = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? `0${s}` : s}`;
-  };
-
-  const groupSubtitle = chat?.isGroup
-    ? (chat.groupMembers || [])
-        .map((m) => (m && currentUser && m.id === currentUser.id ? 'You' : m?.displayName || 'Member'))
-        .join(', ')
-    : null;
-
-  const handleAddGroupMember = (newMember: User) => {
-    if (!chat || !chat.isGroup || !onUpdateChat) return;
-    const currentMembers = chat.groupMembers || [];
-    if (currentMembers.some((m) => m && m.id === newMember.id)) return;
-
-    const updatedMembers = [...currentMembers, newMember];
-    const updatedChat: Chat = {
-      ...chat,
-      groupMembers: updatedMembers,
-      lastMessage: {
-        id: 'msg_' + Date.now(),
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'system',
-        content: `${currentUser?.displayName || 'User'} added ${newMember.displayName} to the group.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'read',
+      voice: {
+        duration: durationStr,
+        audioUrl: 'mock_audio_stream',
       },
-    };
-
-    onUpdateChat(updatedChat);
+      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    });
+    setRecordingDuration(0);
   };
 
-  if (!chat) return null;
+  const chatTitle = chat.isGroup ? chat.groupName : (chat.participant?.displayName || 'Encrypted User');
+  const chatAvatar = chat.isGroup ? (chat.groupIcon || 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=150&auto=format&fit=crop&q=80') : (chat.participant?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80');
+  const chatStatusText = chat.isGroup ? `${chat.groupMembers?.length || 0} members in secure enclave` : (chat.participant?.status === 'online' ? 'Online • End-to-End Encrypted' : 'Offline • Ratcheted Channel');
 
   return (
-    <div
-      className={`flex-1 flex flex-col h-full relative overflow-hidden transition-colors duration-200 ${
-        isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#efeae2] text-slate-900'
-      }`}
-    >
-      <div
-        className={`absolute inset-0 pointer-events-none ${
-          isDark
-            ? 'opacity-[0.035] bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:18px_18px]'
-            : 'opacity-[0.06] bg-[radial-gradient(#059669_1.2px,transparent_1.2px)] [background-size:20px_20px]'
-        }`}
-      />
-
+    <div className={`flex-1 h-full flex flex-col relative ${isDark ? 'bg-[#0b141a]' : 'bg-[#efeae2]'}`}>
       {/* HEADER */}
-      <div
-        className={`relative z-20 flex items-center justify-between px-3 py-2.5 border-b shadow-xs shrink-0 select-none transition-colors duration-200 ${
-          isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
-        }`}
-      >
-        <div className="flex items-center gap-2 min-w-0">
+      <div className={`px-4 py-2.5 flex items-center justify-between border-b select-none z-20 ${
+        isDark ? 'bg-[#202c33] border-slate-800 text-white' : 'bg-[#f0f2f5] border-slate-200 text-slate-900'
+      }`}>
+        <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className={`md:hidden p-1.5 rounded-full transition cursor-pointer ${
-              isDark ? 'hover:bg-slate-700/60 text-slate-300' : 'hover:bg-slate-200 text-slate-700'
-            }`}
+            className="md:hidden p-2 rounded-full hover:bg-slate-500/20 transition cursor-pointer"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div
-            className="relative cursor-pointer shrink-0"
-            onClick={() => {
-              if (chat.isGroup) setShowGroupInfoModal(true);
-              else setShowSafetyModal(true);
-            }}
-          >
-            <img
-              src={chat.groupIcon || chat.participant?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
-              alt={chat.groupName || chat.participant?.displayName || 'Chat'}
-              className="w-10 h-10 rounded-full object-cover ring-1 ring-emerald-500/50"
-            />
-            {chat.isGroup ? (
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-white dark:border-[#202c33] flex items-center justify-center text-white">
-                <Users className="w-2.5 h-2.5" />
-              </span>
-            ) : chat.participant?.status === 'online' ? (
-              <span
-                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ${
-                  isDark ? 'ring-[#202c33]' : 'ring-[#f0f2f5]'
-                }`}
-              />
-            ) : null}
-          </div>
-
-          <div
-            className="cursor-pointer min-w-0"
-            onClick={() => {
-              if (chat.isGroup) setShowGroupInfoModal(true);
-              else setShowSafetyModal(true);
-            }}
-          >
-            <div className="flex items-center gap-1.5 truncate">
-              <h3
-                className={`font-semibold text-sm leading-tight truncate ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}
-              >
-                {chat.isGroup ? chat.groupName : (chat.participant?.displayName || 'Unknown')}
-              </h3>
-              <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
-            </div>
-
-            <p
-              className={`text-[11px] font-mono flex items-center gap-1 truncate ${
-                isDark ? 'text-slate-400' : 'text-slate-500'
-              }`}
-            >
-              {isTyping ? (
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold animate-pulse truncate">
-                  {typingUser || 'typing...'}
-                </span>
-              ) : chat.isGroup ? (
-                <span className="truncate text-[10.5px]">
-                  {groupSubtitle}
-                </span>
-              ) : (
-                <>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                    {chat.participant?.customId}
-                  </span>
-                  <span>•</span>
-                  <span>{chat.participant?.lastSeen || 'Online'}</span>
-                </>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => setShowInfoModal(true)}>
+            <div className="relative">
+              <img src={chatAvatar} alt={chatTitle} className="w-10 h-10 rounded-full object-cover ring-1 ring-emerald-500/40" />
+              {!chat.isGroup && chat.participant?.status === 'online' && (
+                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[#202c33]" />
               )}
-            </p>
+            </div>
+            <div>
+              <h3 className="font-bold text-sm leading-tight flex items-center gap-1.5">
+                {chatTitle}
+                <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
+              </h3>
+              <p className="text-[10px] font-mono text-emerald-500 truncate max-w-[200px] sm:max-w-xs">
+                {chatStatusText}
+              </p>
+            </div>
           </div>
         </div>
 
-        <div className="flex items-center gap-1 text-slate-500 dark:text-slate-300 shrink-0">
-          <ThemeToggle />
-
-          {!chat.isGroup && (
-            <>
-              <button
-                type="button"
-                onClick={() => onStartCall('video')}
-                title="Encrypted Video Call"
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  isDark ? 'hover:bg-slate-700/60 hover:text-white' : 'hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <Video className="w-5 h-5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onStartCall('voice')}
-                title="Encrypted Voice Call"
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  isDark ? 'hover:bg-slate-700/60 hover:text-white' : 'hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <Phone className="w-4.5 h-4.5" />
-              </button>
-            </>
-          )}
-
-          {chat.isGroup ? (
-            <button
-              type="button"
-              onClick={() => setShowGroupInfoModal(true)}
-              title="View Group Info & Members"
-              className={`p-2 rounded-full transition cursor-pointer ${
-                isDark ? 'text-emerald-400 hover:bg-slate-700/60' : 'text-emerald-600 hover:bg-slate-200'
-              }`}
-            >
-              <Info className="w-4.5 h-4.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSafetyModal(true)}
-              title="View E2EE Safety Number"
-              className={`p-2 rounded-full transition cursor-pointer ${
-                isDark
-                  ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60'
-                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-slate-200'
-              }`}
-            >
-              <Lock className="w-4.5 h-4.5" />
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* MESSAGES LIST */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative z-10">
-        <div
-          onClick={() => {
-            if (chat.isGroup) setShowGroupInfoModal(true);
-            else setShowSafetyModal(true);
-          }}
-          className={`mx-auto max-w-sm p-3 rounded-2xl border text-center cursor-pointer shadow-md transition ${
-            isDark
-              ? 'bg-[#182229]/95 border-emerald-500/30 hover:border-emerald-400'
-              : 'bg-emerald-50/90 border-emerald-300 hover:border-emerald-500'
-          }`}
-        >
-       import React, { useState, useRef, useEffect } from 'react';
-import {
-  ArrowLeft,
-  Phone,
-  Video,
-  Shield,
-  Lock,
-  Paperclip,
-  Mic,
-  Send,
-  Check,
-  CheckCheck,
-  Play,
-  Pause,
-  FileText,
-  Image as ImageIcon,
-  Clock,
-  Trash2,
-  Users,
-  Info
-} from 'lucide-react';
-import { Chat, Message, User } from '../types';
-import { SafetyNumberModal } from './SafetyNumberModal';
-import { GroupInfoModal } from './GroupInfoModal';
-import { wsService } from '../services/websocket';
-import { useTheme } from '../context/ThemeContext';
-import { ThemeToggle } from './ThemeToggle';
-
-interface ChatRoomProps {
-  chat: Chat;
-  currentUser: User;
-  messages: Message[];
-  onBack: () => void;
-  onSendMessage: (msg: Partial<Message>) => void;
-  onStartCall: (type: 'voice' | 'video') => void;
-  onUpdateChat?: (updatedChat: Chat) => void;
-}
-
-export const ChatRoom: React.FC<ChatRoomProps> = ({
-  chat,
-  currentUser,
-  messages,
-  onBack,
-  onSendMessage,
-  onStartCall,
-  onUpdateChat,
-}) => {
-  const { isDark } = useTheme();
-  const [inputText, setInputText] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [typingUser, setTypingUser] = useState('');
-  const [showSafetyModal, setShowSafetyModal] = useState(false);
-  const [showGroupInfoModal, setShowGroupInfoModal] = useState(false);
-  const [showAttachmentMenu, setShowAttachmentMenu] = useState(false);
-
-  const getDeterministicChatId = () => {
-    if (chat.isGroup) return chat.id;
-    if (chat.participant && currentUser) {
-      const id1 = currentUser.id || currentUser.customId;
-      const id2 = chat.participant.id || chat.participant.customId;
-      if (id1 && id2) {
-        return [id1, id2].sort().join('_');
-      }
-    }
-    return chat.id || 'chat_default';
-  };
-
-  const targetChatId = getDeterministicChatId();
-
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
-
-  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
-  const [voiceProgress, setVoiceProgress] = useState<{ [id: string]: number }>({});
-
-  const messagesEndRef = useRef<HTMLDivElement>(null);
-  const recordingTimerRef = useRef<any>(null);
-  const playbackTimerRef = useRef<any>(null);
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages, isTyping]);
-
-  useEffect(() => {
-    if (targetChatId) {
-      wsService.emit('chat:join', targetChatId);
-    }
-
-    // Listen to incoming messages for this active chat room
-    const unsubMessage = wsService.on('chat:new_message', (data: any) => {
-      if (data && data.chatId === targetChatId) {
-        if (data.senderId !== (currentUser?.id || currentUser?.customId)) {
-          const incomingMsg: Partial<Message> = {
-            id: data.id || ('msg_' + Date.now()),
-            chatId: data.chatId,
-            senderId: data.senderId,
-            senderName: data.senderName,
-            type: data.type || 'text',
-            content: data.content,
-            timestamp: data.timestamp || new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            status: 'delivered',
-            media: data.media || null,
-            voice: data.voice || null,
-          };
-          onSendMessage(incomingMsg);
-        }
-      }
-    });
-
-    const unsubTyping = wsService.on('chat:typing', (data: any) => {
-      if (data && data.chatId === targetChatId && data.senderCustomId !== currentUser?.customId) {
-        setIsTyping(data.isTyping);
-        if (data.senderName) setTypingUser(data.senderName);
-      }
-    });
-
-    return () => {
-      unsubMessage();
-      unsubTyping();
-    };
-  }, [targetChatId, currentUser]);
-
-  const handleSendText = (e?: React.FormEvent) => {
-    if (e) e.preventDefault();
-    if (!inputText.trim() || !chat) return;
-
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-    const tempId = 'temp_' + Date.now();
-
-    const socketPayload = {
-      chatId: targetChatId,
-      recipientId: recipientId,
-      senderId: senderId,
-      senderName: currentUser?.displayName || 'User',
-      content: inputText.trim(),
-      type: 'text',
-      tempId: tempId,
-    };
-
-    wsService.send('chat:send_message', socketPayload);
-
-    const newMsg: Partial<Message> = {
-      id: tempId,
-      chatId: targetChatId,
-      senderId: currentUser?.id || 'usr_me',
-      senderName: currentUser?.displayName || 'User',
-      type: 'text',
-      content: inputText.trim(),
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'delivered',
-    };
-
-    onSendMessage(newMsg);
-    setInputText('');
-    setShowAttachmentMenu(false);
-  };
-
-  const startRecording = () => {
-    setIsRecording(true);
-    setRecordingSeconds(0);
-    recordingTimerRef.current = setInterval(() => {
-      setRecordingSeconds((s) => s + 1);
-    }, 1000);
-  };
-
-  const cancelRecording = () => {
-    setIsRecording(false);
-    setRecordingSeconds(0);
-    clearInterval(recordingTimerRef.current);
-  };
-
-  const sendVoiceNote = () => {
-    if (!chat) return;
-    setIsRecording(false);
-    clearInterval(recordingTimerRef.current);
-    const duration = Math.max(recordingSeconds, 3);
-
-    const waveform: number[] = [];
-    for (let i = 0; i < 20; i++) {
-      waveform.push(Math.floor(Math.random() * 70) + 25);
-    }
-
-    const tempId = 'temp_voice_' + Date.now();
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-
-    wsService.send('chat:send_message', {
-      chatId: targetChatId,
-      recipientId: recipientId,
-      senderId: senderId,
-      senderName: currentUser?.displayName || 'User',
-      content: `Voice message (${duration}s)`,
-      type: 'voice',
-      tempId: tempId,
-      voice: { duration, waveform }
-    });
-
-    const voiceMsg: Partial<Message> = {
-      id: tempId,
-      chatId: targetChatId,
-      senderId: currentUser?.id || 'usr_me',
-      senderName: currentUser?.displayName || 'User',
-      type: 'voice',
-      content: `Voice message (${duration}s)`,
-      timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'delivered',
-      voice: { duration, waveform },
-    };
-
-    onSendMessage(voiceMsg);
-    setRecordingSeconds(0);
-  };
-
-  const togglePlayVoice = (msgId: string, duration: number) => {
-    if (playingVoiceId === msgId) {
-      clearInterval(playbackTimerRef.current);
-      setPlayingVoiceId(null);
-    } else {
-      clearInterval(playbackTimerRef.current);
-      setPlayingVoiceId(msgId);
-
-      playbackTimerRef.current = setInterval(() => {
-        setVoiceProgress((prev) => {
-          const current = prev[msgId] || 0;
-          if (current >= 100) {
-            clearInterval(playbackTimerRef.current);
-            setPlayingVoiceId(null);
-            return { ...prev, [msgId]: 0 };
-          }
-          return { ...prev, [msgId]: current + (100 / (duration * 10)) * playbackSpeed };
-        });
-      }, 100);
-    }
-  };
-
-  const cycleSpeed = () => {
-    if (playbackSpeed === 1) setPlaybackSpeed(1.5);
-    else if (playbackSpeed === 1.5) setPlaybackSpeed(2);
-    else setPlaybackSpeed(1);
-  };
-
-  const handleSendMediaAttachment = (type: 'image' | 'file') => {
-    if (!chat) return;
-    setShowAttachmentMenu(false);
-    const tempId = 'temp_media_' + Date.now();
-    const recipientId = chat.participant?.id || chat.participant?.customId;
-    const senderId = currentUser?.id || currentUser?.customId;
-
-    if (type === 'image') {
-      const mediaObj = {
-        type: 'image' as const,
-        url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80',
-        name: 'encrypted_payload_capture.png',
-        size: '1.8 MB',
-        encryptedHash: 'sha256-4b227777d4678d45e412347890abcdef',
-      };
-
-      wsService.send('chat:send_message', {
-        chatId: targetChatId,
-        recipientId: recipientId,
-        senderId: senderId,
-        senderName: currentUser?.displayName || 'User',
-        content: 'Sent an encrypted photo',
-        type: 'image',
-        tempId: tempId,
-        media: mediaObj
-      });
-
-      const imgMsg: Partial<Message> = {
-        id: tempId,
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'image',
-        content: 'Sent an encrypted photo',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered',
-        media: mediaObj,
-      };
-      onSendMessage(imgMsg);
-    } else {
-      const mediaObj = {
-        type: 'file' as const,
-        url: '#',
-        name: 'offshore_routing_mesh.pdf',
-        size: '3.1 MB',
-        encryptedHash: 'sha256-a192837465b0c9d8e7f6a5b4c3d2e1f0',
-      };
-
-      wsService.send('chat:send_message', {
-        chatId: targetChatId,
-        recipientId: recipientId,
-        senderId: senderId,
-        senderName: currentUser?.displayName || 'User',
-        content: 'offshore_routing_mesh.pdf',
-        type: 'file',
-        tempId: tempId,
-        media: mediaObj
-      });
-
-      const docMsg: Partial<Message> = {
-        id: tempId,
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'file',
-        content: 'offshore_routing_mesh.pdf',
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered',
-        media: mediaObj,
-      };
-      onSendMessage(docMsg);
-    }
-  };
-
-  const formatSecs = (sec: number) => {
-    const m = Math.floor(sec / 60);
-    const s = sec % 60;
-    return `${m}:${s < 10 ? `0${s}` : s}`;
-  };
-
-  const groupSubtitle = chat?.isGroup
-    ? (chat.groupMembers || [])
-        .map((m) => (m && currentUser && m.id === currentUser.id ? 'You' : m?.displayName || 'Member'))
-        .join(', ')
-    : null;
-
-  const handleAddGroupMember = (newMember: User) => {
-    if (!chat || !chat.isGroup || !onUpdateChat) return;
-    const currentMembers = chat.groupMembers || [];
-    if (currentMembers.some((m) => m && m.id === newMember.id)) return;
-
-    const updatedMembers = [...currentMembers, newMember];
-    const updatedChat: Chat = {
-      ...chat,
-      groupMembers: updatedMembers,
-      lastMessage: {
-        id: 'msg_' + Date.now(),
-        chatId: targetChatId,
-        senderId: currentUser?.id || 'usr_me',
-        senderName: currentUser?.displayName || 'User',
-        type: 'system',
-        content: `${currentUser?.displayName || 'User'} added ${newMember.displayName} to the group.`,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'read',
-      },
-    };
-
-    onUpdateChat(updatedChat);
-  };
-
-  if (!chat) return null;
-
-  return (
-    <div
-      className={`flex-1 flex flex-col h-full relative overflow-hidden transition-colors duration-200 ${
-        isDark ? 'bg-[#0b141a] text-slate-100' : 'bg-[#efeae2] text-slate-900'
-      }`}
-    >
-      <div
-        className={`absolute inset-0 pointer-events-none ${
-          isDark
-            ? 'opacity-[0.035] bg-[radial-gradient(#10b981_1px,transparent_1px)] [background-size:18px_18px]'
-            : 'opacity-[0.06] bg-[radial-gradient(#059669_1.2px,transparent_1.2px)] [background-size:20px_20px]'
-        }`}
-      />
-
-      {/* HEADER */}
-      <div
-        className={`relative z-20 flex items-center justify-between px-3 py-2.5 border-b shadow-xs shrink-0 select-none transition-colors duration-200 ${
-          isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
-        }`}
-      >
-        <div className="flex items-center gap-2 min-w-0">
+        <div className="flex items-center gap-1 relative">
           <button
             type="button"
-            onClick={onBack}
-            className={`md:hidden p-1.5 rounded-full transition cursor-pointer ${
-              isDark ? 'hover:bg-slate-700/60 text-slate-300' : 'hover:bg-slate-200 text-slate-700'
-            }`}
+            onClick={() => onStartCall('voice')}
+            title="Start Encrypted Voice Call"
+            className="p-2.5 rounded-full hover:bg-slate-500/20 transition text-emerald-500 cursor-pointer"
           >
-            <ArrowLeft className="w-5 h-5" />
+            <Phone className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => onStartCall('video')}
+            title="Start Encrypted Video Call"
+            className="p-2.5 rounded-full hover:bg-slate-500/20 transition text-emerald-500 cursor-pointer"
+          >
+            <Video className="w-4 h-4" />
+          </button>
+          <button
+            type="button"
+            onClick={() => setShowChatMenu(!showChatMenu)}
+            className="p-2.5 rounded-full hover:bg-slate-500/20 transition cursor-pointer"
+          >
+            <MoreVertical className="w-4 h-4" />
           </button>
 
-          <div
-            className="relative cursor-pointer shrink-0"
-            onClick={() => {
-              if (chat.isGroup) setShowGroupInfoModal(true);
-              else setShowSafetyModal(true);
-            }}
-          >
-            <img
-              src={chat.groupIcon || chat.participant?.avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80'}
-              alt={chat.groupName || chat.participant?.displayName || 'Chat'}
-              className="w-10 h-10 rounded-full object-cover ring-1 ring-emerald-500/50"
-            />
-            {chat.isGroup ? (
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 rounded-full bg-emerald-600 border border-white dark:border-[#202c33] flex items-center justify-center text-white">
-                <Users className="w-2.5 h-2.5" />
-              </span>
-            ) : chat.participant?.status === 'online' ? (
-              <span
-                className={`absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ${
-                  isDark ? 'ring-[#202c33]' : 'ring-[#f0f2f5]'
-                }`}
-              />
-            ) : null}
-          </div>
-
-          <div
-            className="cursor-pointer min-w-0"
-            onClick={() => {
-              if (chat.isGroup) setShowGroupInfoModal(true);
-              else setShowSafetyModal(true);
-            }}
-          >
-            <div className="flex items-center gap-1.5 truncate">
-              <h3
-                className={`font-semibold text-sm leading-tight truncate ${
-                  isDark ? 'text-white' : 'text-slate-900'
-                }`}
+          {showChatMenu && (
+            <div className={`absolute right-0 top-12 z-40 w-48 rounded-2xl border shadow-2xl py-1 text-xs ${
+              isDark ? 'bg-[#233138] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+            }`}>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInfoModal(true);
+                  setShowChatMenu(false);
+                }}
+                className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 ${isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'}`}
               >
-                {chat.isGroup ? chat.groupName : (chat.participant?.displayName || 'Unknown')}
-              </h3>
-              <Shield className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <Info className="w-4 h-4 text-emerald-500" />
+                <span>Enclave Info</span>
+              </button>
             </div>
-
-            <p
-              className={`text-[11px] font-mono flex items-center gap-1 truncate ${
-                isDark ? 'text-slate-400' : 'text-slate-500'
-              }`}
-            >
-              {isTyping ? (
-                <span className="text-emerald-600 dark:text-emerald-400 font-semibold animate-pulse truncate">
-                  {typingUser || 'typing...'}
-                </span>
-              ) : chat.isGroup ? (
-                <span className="truncate text-[10.5px]">
-                  {groupSubtitle}
-                </span>
-              ) : (
-                <>
-                  <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
-                    {chat.participant?.customId}
-                  </span>
-                  <span>•</span>
-                  <span>{chat.participant?.lastSeen || 'Online'}</span>
-                </>
-              )}
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1 text-slate-500 dark:text-slate-300 shrink-0">
-          <ThemeToggle />
-
-          {!chat.isGroup && (
-            <>
-              <button
-                type="button"
-                onClick={() => onStartCall('video')}
-                title="Encrypted Video Call"
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  isDark ? 'hover:bg-slate-700/60 hover:text-white' : 'hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <Video className="w-5 h-5" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => onStartCall('voice')}
-                title="Encrypted Voice Call"
-                className={`p-2 rounded-full transition cursor-pointer ${
-                  isDark ? 'hover:bg-slate-700/60 hover:text-white' : 'hover:bg-slate-200 text-slate-700'
-                }`}
-              >
-                <Phone className="w-4.5 h-4.5" />
-              </button>
-            </>
-          )}
-
-          {chat.isGroup ? (
-            <button
-              type="button"
-              onClick={() => setShowGroupInfoModal(true)}
-              title="View Group Info & Members"
-              className={`p-2 rounded-full transition cursor-pointer ${
-                isDark ? 'text-emerald-400 hover:bg-slate-700/60' : 'text-emerald-600 hover:bg-slate-200'
-              }`}
-            >
-              <Info className="w-4.5 h-4.5" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setShowSafetyModal(true)}
-              title="View E2EE Safety Number"
-              className={`p-2 rounded-full transition cursor-pointer ${
-                isDark
-                  ? 'text-emerald-400 hover:text-emerald-300 hover:bg-slate-700/60'
-                  : 'text-emerald-600 hover:text-emerald-700 hover:bg-slate-200'
-              }`}
-            >
-              <Lock className="w-4.5 h-4.5" />
-            </button>
           )}
         </div>
       </div>
 
-      {/* MESSAGES LIST */}
-      <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 relative z-10">
-        <div
-          onClick={() => {
-            if (chat.isGroup) setShowGroupInfoModal(true);
-            else setShowSafetyModal(true);
-          }}
-          className={`mx-auto max-w-sm p-3 rounded-2xl border text-center cursor-pointer shadow-md transition ${
-            isDark
-              ? 'bg-[#182229]/95 border-emerald-500/30 hover:border-emerald-400'
-              : 'bg-emerald-50/90 border-emerald-300 hover:border-emerald-500'
-          }`}
-        >
-          <div className="flex items-center justify-center gap-1.5 text-emerald-600 dark:text-emerald-400 text-xs font-bold mb-1">
-            <Lock className="w-3.5 h-3.5" />
-            <span>{chat.isGroup ? 'Group Encrypted Ratchet' : 'End-to-End Encrypted'}</span>
+      {/* MESSAGE LIST */}
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+        <div className="flex justify-center mb-4">
+          <div className={`px-3 py-1.5 rounded-xl border text-[11px] font-mono flex items-center gap-2 max-w-md text-center shadow-sm ${
+            isDark ? 'bg-[#182229] border-emerald-500/20 text-emerald-400' : 'bg-[#fff5c0] border-amber-200 text-slate-800'
+          }`}>
+            <Lock className="w-3.5 h-3.5 shrink-0 text-emerald-500" />
+            <span>Messages & calls are secured with 256-bit Post-Quantum ratcheted encryption. Zero logs retained.</span>
           </div>
-          <p
-            className={`text-[11px] leading-relaxed font-sans ${
-              isDark ? 'text-slate-300' : 'text-slate-700'
-            }`}
-          >
-            {chat.isGroup
-              ? `Messages and files in "${chat.groupName}" are secured with multi-party 256-bit sender keys. Only current members can decrypt them.`
-              : 'Messages and calls in this conversation are secured with 256-bit Post-Quantum ratcheted encryption.'}
-          </p>
-          <span className="inline-block mt-1 text-[10px] font-mono text-emerald-600 dark:text-emerald-400 underline font-semibold">
-            {chat.isGroup ? 'Tap to view group members & ratchet info' : 'Tap to verify safety fingerprint'}
-          </span>
         </div>
 
-        {messages.map((msg) => {
-          if (!msg) return null;
-          const isMe = currentUser && (msg.senderId === currentUser.id || msg.senderId === currentUser.customId || msg.senderName === currentUser.displayName);
-          const isSystem = msg.type === 'system';
-
-          if (isSystem) {
-            return (
-              <div key={msg.id} className="flex justify-center my-2">
-                <div
-                  className={`px-3 py-1.5 rounded-xl text-center text-xs font-mono max-w-sm border shadow-xs ${
-                    isDark
-                      ? 'bg-slate-900/80 border-slate-800 text-slate-300'
-                      : 'bg-slate-100 border-slate-200 text-slate-700'
-                  }`}
-                >
-                  <p>{msg.content}</p>
-                  <span className="text-[9px] opacity-70 block mt-0.5">{msg.timestamp}</span>
-                </div>
-              </div>
-            );
-          }
-
+        {messages.map((msg, idx) => {
+          const isMe = msg.senderId === currentUser.id;
           return (
-            <div
-              key={msg.id}
-              className={`flex flex-col group ${isMe ? 'items-end' : 'items-start'}`}
-            >
-              <div
-                className={`relative max-w-[85%] sm:max-w-md px-3.5 py-2 rounded-2xl shadow-sm text-sm break-words transition-colors ${
-                  isMe
-                    ? isDark
-                      ? 'bg-[#005c4b] text-white rounded-tr-none'
-                      : 'bg-[#d9fdd3] text-slate-900 rounded-tr-none border border-emerald-200/60 shadow-xs'
-                    : isDark
-                    ? 'bg-[#202c33] text-slate-100 rounded-tl-none border border-slate-700/40'
-                    : 'bg-[#ffffff] text-slate-900 rounded-tl-none border border-slate-200/80 shadow-xs'
-                }`}
-              >
-                {!isMe && (
-                  <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 mb-0.5 flex items-center gap-1">
-                    <span>{msg.senderName || chat.participant?.displayName || 'User'}</span>
-                  </p>
+            <div key={msg.id || idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
+              <div className={`max-w-[75%]] sm:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm relative text-xs sm:text-sm ${
+                isMe
+                  ? isDark ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#d9fdd3] text-slate-900 rounded-tr-none'
+                  : isDark ? 'bg-[#202c33] text-slate-100 rounded-tl-none' : 'bg-white text-slate-900 rounded-tl-none'
+              }`}>
+                {chat.isGroup && !isMe && (
+                  <p className="text-[10px] font-bold text-teal-400 mb-0.5">{msg.senderName}</p>
                 )}
 
-                {msg.type === 'text' && (
-                  <p className="leading-relaxed whitespace-pre-wrap">{msg.content}</p>
+                {msg.type === 'text' && <p className="break-words leading-relaxed">{msg.content}</p>}
+
+                {msg.type === 'image' && msg.media && (
+                  <div className="space-y-1.5 mb-1">
+                    <img src={msg.media.url} alt="media" className="rounded-xl max-h-60 object-cover w-full cursor-pointer" />
+                    <p className="text-[10px] opacity-80">{msg.media.name}</p>
+                  </div>
+                )}
+
+                {msg.type === 'document' && msg.media && (
+                  <div className="flex items-center gap-3 p-2 rounded-xl bg-black/25 mb-1">
+                    <FileText className="w-8 h-8 text-emerald-400 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-bold truncate">{msg.media.name}</p>
+                      <p className="text-[10px] opacity-75">{msg.media.size} • Encrypted Doc</p>
+                    </div>
+                  </div>
                 )}
 
                 {msg.type === 'voice' && (
-                  <div className="flex items-center gap-2.5 py-1 min-w-[220px]">
-                    <button
-                      type="button"
-                      onClick={() => togglePlayVoice(msg.id, msg.voice?.duration || 10)}
-                      className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-slate-950 flex items-center justify-center shrink-0 shadow transition cursor-pointer"
-                    >
-                      {playingVoiceId === msg.id ? (
-                        <Pause className="w-4 h-4 fill-current" />
-                      ) : (
-                        <Play className="w-4 h-4 fill-current ml-0.5" />
-                      )}
-                    </button>
-
-                    <div className="flex-1 flex flex-col gap-1">
-                      <div className="flex items-center gap-0.5 h-6">
-                        {(msg.voice?.waveform || [40, 60, 80, 50, 70, 90, 40, 60, 80, 50, 70, 90, 40, 60]).map(
-                          (h, i) => {
-                            const percent = ((i + 1) / 14) * 100;
-                            const currentProgress = voiceProgress[msg.id] || 0;
-                            const isPlayed = currentProgress >= percent;
-
-                            return (
-                              <div
-                                key={i}
-                                className={`w-1 rounded-full transition-all duration-150 ${
-                                  isPlayed
-                                    ? 'bg-emerald-500'
-                                    : isDark
-                                    ? 'bg-slate-500/60'
-                                    : 'bg-slate-300'
-                                }`}
-                                style={{ height: `${Math.max(6, (h / 100) * 24)}px` }}
-                              />
-                            );
-                          }
-                        )}
+                  <div className="flex items-center gap-3 py-1 min-w-[160px]">
+                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                      <Mic className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1">
+                      <div className="h-1.5 w-full bg-slate-600/50 rounded-full overflow-hidden">
+                        <div className="h-full bg-emerald-400 w-2/3" />
                       </div>
-
-                      <div
-                        className={`flex items-center justify-between text-[10px] font-mono ${
-                          isMe
-                            ? isDark
-                              ? 'text-slate-300/80'
-                              : 'text-slate-600'
-                            : isDark
-                            ? 'text-slate-400'
-                            : 'text-slate-500'
-                        }`}
-                      >
-                        <span>{formatSecs(msg.voice?.duration || 12)}</span>
-                        <button
-                          type="button"
-                          onClick={cycleSpeed}
-                          className={`px-1.5 py-0.5 rounded text-[10px] font-bold cursor-pointer ${
-                            isDark
-                              ? 'bg-black/30 hover:bg-black/50 text-emerald-300'
-                              : 'bg-slate-200 hover:bg-slate-300 text-emerald-800'
-                          }`}
-                        >
-                          {playbackSpeed}x
-                        </button>
+                      <div className="flex justify-between text-[10px] opacity-75 mt-1 font-mono">
+                        <span>Voice Note</span>
+                        <span>{msg.voice?.duration || '0:12'}</span>
                       </div>
                     </div>
                   </div>
                 )}
 
-                {msg.type === 'image' && msg.media && (
-                  <div className="mt-0.5 mb-1.5">
-                    <div className="relative rounded-xl overflow-hidden border border-black/10 dark:border-white/10 group">
-                      <img
-                        src={msg.media.url}
-                        alt="Encrypted payload"
-                        className="w-full max-h-60 object-cover"
-                      />
-                      <div className="absolute top-2 left-2 px-2 py-0.5 rounded-full bg-black/70 backdrop-blur-sm text-[10px] font-mono text-emerald-400 flex items-center gap-1">
-                        <Lock className="w-3 h-3" /> Encrypted Media
-                      </div>
-                    </div>
-                    <p
-                      className={`mt-1 text-xs ${
-                        isDark ? 'text-slate-300' : 'text-slate-700'
-                      }`}
-                    >
-                      {msg.content}
-                    </p>
-                  </div>
-                )}
-
-                {msg.type === 'file' && msg.media && (
-                  <div
-                    className={`flex items-center gap-2.5 p-2 rounded-xl my-1 border ${
-                      isDark
-                        ? 'bg-black/25 border-white/10'
-                        : 'bg-emerald-50 border-emerald-200'
-                    }`}
-                  >
-                    <div className="w-9 h-9 rounded-lg bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center shrink-0">
-                      <FileText className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                    </div>
-                    <div className="flex-1 truncate">
-                      <p
-                        className={`text-xs font-semibold truncate ${
-                          isDark ? 'text-white' : 'text-slate-900'
-                        }`}
-                      >
-                        {msg.media.name}
-                      </p>
-                      <p
-                        className={`text-[10px] font-mono ${
-                          isDark ? 'text-slate-400' : 'text-slate-500'
-                        }`}
-                      >
-                        {msg.media.size} • Encrypted SHA-256
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                <div
-                  className={`flex items-center justify-end gap-1 mt-1 text-[10px] font-mono select-none ${
-                    isMe
-                      ? isDark
-                        ? 'text-slate-300/80'
-                        : 'text-slate-600'
-                      : isDark
-                      ? 'text-slate-400'
-                      : 'text-slate-500'
-                  }`}
-                >
+                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] font-mono opacity-75">
                   <span>{msg.timestamp}</span>
                   {isMe && (
-                    <span className="inline-flex">
-                      <CheckCheck className="w-3.5 h-3.5 text-cyan-500 dark:text-cyan-300" />
+                    <span>
+                      <CheckCheck className={`w-3.5 h-3.5 ${msg.status === 'read' ? 'text-cyan-400' : ''}`} />
                     </span>
                   )}
                 </div>
@@ -1234,166 +287,91 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             </div>
           );
         })}
-
-        {isTyping && (
-          <div
-            className={`flex items-center gap-1.5 px-3 py-2 rounded-2xl border w-24 ${
-              isDark ? 'bg-[#202c33] border-slate-700/50' : 'bg-white border-slate-200'
-            }`}
-          >
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.3s]" />
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce [animation-delay:-0.15s]" />
-            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" />
-          </div>
-        )}
-
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ATTACHMENT MENU */}
-      {showAttachmentMenu && (
-        <div
-          className={`absolute bottom-16 left-4 z-30 p-2 rounded-2xl border shadow-2xl flex flex-col gap-1 w-52 animate-in fade-in slide-in-from-bottom-2 ${
-            isDark ? 'bg-[#202c33] border-slate-700' : 'bg-white border-slate-200'
-          }`}
-        >
-          <button
-            type="button"
-            onClick={() => handleSendMediaAttachment('image')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition text-left cursor-pointer ${
-              isDark ? 'hover:bg-slate-700/60 text-white' : 'hover:bg-slate-100 text-slate-900'
-            }`}
-          >
-            <div className="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-              <ImageIcon className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-semibold leading-none">Encrypted Photo</p>
-              <p className="text-[10px] text-slate-500">Zero metadata / EXIF stripped</p>
-            </div>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => handleSendMediaAttachment('file')}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs transition text-left cursor-pointer ${
-              isDark ? 'hover:bg-slate-700/60 text-white' : 'hover:bg-slate-100 text-slate-900'
-            }`}
-          >
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
-              <FileText className="w-4 h-4" />
-            </div>
-            <div>
-              <p className="font-semibold leading-none">Encrypted File</p>
-              <p className="text-[10px] text-slate-500">PDF / Keys / Specs</p>
-            </div>
-          </button>
-        </div>
-      )}
-
-      {/* FOOTER INPUT */}
-      <div
-        className={`relative z-20 px-3 py-2 border-t shrink-0 transition-colors duration-200 ${
-          isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'
-        }`}
-      >
+      {/* INPUT FOOTER */}
+      <div className={`p-3 border-relative ${isDark ? 'bg-[#202c33] border-slate-800' : 'bg-[#f0f2f5] border-slate-200'}`}>
         {isRecording ? (
-          <div
-            className={`flex items-center justify-between gap-3 px-4 py-2.5 rounded-full border ${
-              isDark
-                ? 'bg-[#111b21] border-emerald-500/40'
-                : 'bg-white border-emerald-500/60 shadow-md'
-            }`}
-          >
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-full bg-rose-500 animate-ping" />
-              <span className="text-xs font-mono font-bold text-rose-500">
-                REC {formatSecs(recordingSeconds)}
-              </span>
+          <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30">
+            <div className="flex items-center gap-3 text-rose-500 font-bold text-xs animate-pulse">
+              <span className="w-3 h-3 rounded-full bg-rose-500" />
+              <span>Recording Voice Enclave ({recordingDuration}s)...</span>
             </div>
-
-            <div className="flex-1 flex items-center justify-center gap-1 h-4 px-4">
-              {[30, 70, 45, 90, 60, 100, 75, 40, 80, 60].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-emerald-500 rounded-full animate-pulse"
-                  style={{
-                    height: `${(h / 100) * 16}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                />
-              ))}
-            </div>
-
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={cancelRecording}
-                className="p-1.5 rounded-full hover:bg-rose-500/20 text-rose-500 transition cursor-pointer"
-                title="Discard"
+                onClick={() => setIsRecording(false)}
+                className="p-2 rounded-xl bg-slate-700 text-white text-xs"
               >
-                <Trash2 className="w-5 h-5" />
+                Cancel
               </button>
-
               <button
                 type="button"
-                onClick={sendVoiceNote}
-                className="w-9 h-9 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white dark:text-slate-950 flex items-center justify-center shadow-lg transition cursor-pointer"
-                title="Send Voice Note"
+                onClick={stopAndSendRecording}
+                className="px-4 py-2 rounded-xl bg-emerald-600 text-white font-bold text-xs"
               >
-                <Send className="w-4 h-4" />
+                Send Voice
               </button>
             </div>
           </div>
         ) : (
-          <form onSubmit={handleSendText} className="flex items-center gap-1.5 sm:gap-2">
-            <button
-              type="button"
-              onClick={() => setShowAttachmentMenu(!showAttachmentMenu)}
-              className={`p-2 rounded-full transition cursor-pointer ${
-                isDark ? 'text-slate-400 hover:text-white hover:bg-slate-700/60' : 'text-slate-600 hover:text-slate-900 hover:bg-slate-200'
-              }`}
-              title="Attach File / Media"
-            >
-              <Paperclip className="w-5 h-5" />
-            </button>
+          <form onSubmit={handleSend} className="flex items-center gap-2 relative">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowAttachMenu(!showAttachMenu)}
+                className="p-2.5 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
+              >
+                <Paperclip className="w-5 h-5" />
+              </button>
 
-            <div className="flex-1 relative flex items-center">
-              <input
-                type="text"
-                value={inputText}
-                onChange={(e) => {
-                  setInputText(e.target.value);
-                  wsService.emit('chat:typing', {
-                    chatId: targetChatId,
-                    recipientId: chat.participant?.id || chat.participant?.customId,
-                    isTyping: e.target.value.length > 0,
-                    senderCustomId: currentUser?.customId,
-                    senderName: currentUser?.displayName,
-                  });
-                }}
-                placeholder={chat.isGroup ? `Message ${chat.groupName}...` : 'Type an encrypted message...'}
-                className={`w-full rounded-full px-4 py-2.5 text-sm transition focus:outline-none focus:ring-1 focus:ring-emerald-500 border ${
-                  isDark
-                    ? 'bg-[#2a3942] border-slate-700/60 text-white placeholder-slate-400'
-                    : 'bg-white border-slate-300 text-slate-900 placeholder-slate-500 shadow-xs'
-                }`}
-              />
+              {showAttachMenu && (
+                <div className={`absolute bottom-12 left-0 z-40 w-48 rounded-2xl border shadow-2xl py-2 text-xs space-y-1 ${
+                  isDark ? 'bg-[#233138] border-slate-700 text-slate-100' : 'bg-white border-slate-200 text-slate-800'
+                }`}>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className={`w-full px-4 py-2 text-left flex items-center gap-2.5 ${isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'}`}
+                  >
+                    <ImageIcon className="w-4 h-4 text-emerald-500" />
+                    <span>Upload Image</span>
+                  </button>
+                  <input
+                    type="file"
+                    ref={fileInputRef}
+                    onChange={(e) => handleFileUpload(e, 'image')}
+                    accept="image/*"
+                    className="hidden"
+                  />
+                </div>
+              )}
             </div>
+
+            <input
+              type="text"
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              placeholder="Type an encrypted message..."
+              className={`flex-1 rounded-2xl px-4 py-3 text-xs sm:text-sm outline-none border transition focus:ring-2 focus:ring-emerald-500 ${
+                isDark ? 'bg-[#111b21] border-slate-700 text-white placeholder-slate-500' : 'bg-white border-slate-300 text-slate-900 placeholder-slate-400'
+              }`}
+            />
 
             {inputText.trim() ? (
               <button
                 type="submit"
-                className="w-10 h-10 rounded-full bg-emerald-500 hover:bg-emerald-400 text-white dark:text-slate-950 flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer shrink-0"
+                className="p-3 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg transition cursor-pointer"
               >
-                <Send className="w-4 h-4 ml-0.5" />
+                <Send className="w-4 h-4" />
               </button>
             ) : (
               <button
                 type="button"
                 onClick={startRecording}
-                title="Hold or tap to record voice note"
-                className="w-10 h-10 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center shadow-md transition transform active:scale-95 cursor-pointer shrink-0"
+                title="Hold to record voice note"
+                className="p-3 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
               >
                 <Mic className="w-5 h-5" />
               </button>
@@ -1402,26 +380,45 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         )}
       </div>
 
-      {!chat.isGroup && chat.participant && (
-        <SafetyNumberModal
-          isOpen={showSafetyModal}
-          onClose={() => setShowSafetyModal(false)}
-          participant={chat.participant}
-          currentUser={currentUser}
-        />
-      )}
+      {/* INFO MODAL */}
+      {showInfoModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className={`w-full max-w-sm p-6 rounded-3xl border shadow-2xl ${isDark ? 'bg-[#222d34] border-slate-700 text-white' : 'bg-white border-slate-200 text-slate-900'}`}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-base font-bold flex items-center gap-2">
+                <Lock className="w-5 h-5 text-emerald-500" /> Enclave Details
+              </h3>
+              <button type="button" onClick={() => setShowInfoModal(false)} className="p-1.5 rounded-full hover:bg-slate-500/20">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
 
-      {chat.isGroup && (
-        <GroupInfoModal
-          chat={chat}
-          currentUser={currentUser}
-          isOpen={showGroupInfoModal}
-          onClose={() => setShowGroupInfoModal(false)}
-          onAddMember={handleAddGroupMember}
-          onLeaveGroup={() => {
-            onBack();
-          }}
-        />
+            <div className="flex flex-col items-center text-center mb-4">
+              <img src={chatAvatar} alt="" className="w-20 h-20 rounded-full object-cover ring-2 ring-emerald-500 mb-3" />
+              <h4 className="font-bold text-base">{chatTitle}</h4>
+              <p className="text-xs font-mono text-emerald-500 mt-0.5">{chat.isGroup ? 'Encrypted Group Channel' : chat.participant?.customId}</p>
+            </div>
+
+            <div className={`p-3 rounded-2xl border text-xs space-y-2 mb-4 ${isDark ? 'bg-[#111b21] border-slate-700/60' : 'bg-slate-50 border-slate-200'}`}>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Fingerprint:</span>
+                <span className="font-mono text-emerald-400">E2EE-9842-SECURE</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Protocol:</span>
+                <span className="font-mono">AES-256-GCM Ratchet</span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowInfoModal(false)}
+              className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs"
+            >
+              Close
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
