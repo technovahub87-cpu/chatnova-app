@@ -2,11 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { Dashboard } from './components/Dashboard';
 import { MasterAdminPanel } from './components/MasterAdminPanel';
 import { AuthScreen } from './components/AuthScreen';
+import { SplashScreen } from './components/SplashScreen';
 import { User } from './types';
 import { wsService } from './services/websocket';
 import { ThemeProvider } from './context/ThemeContext';
 
 export function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
   const [currentUser, setCurrentUser] = useState<User | null>(() => {
     try {
       const saved = localStorage.getItem('chatnova_current_user');
@@ -16,6 +19,14 @@ export function App() {
   });
 
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
+
+  // Splash screen timeout (2 seconds)
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 2000);
+    return () => clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (currentUser) {
@@ -43,6 +54,10 @@ export function App() {
       localStorage.removeItem('chatnova_current_user');
     } catch (e) {}
   };
+
+  if (showSplash) {
+    return <SplashScreen />;
+  }
 
   return (
     <ThemeProvider>
