@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Login } from './components/Dashboard'; // ya jahan bhi tera login/dashboard hai
 import { Dashboard } from './components/Dashboard';
-import { MasterAdminModal } from './components/MasterAdminModal';
+import { MasterAdminPanel } from './components/MasterAdminPanel';
 import { User } from './types';
 import { INITIAL_USERS } from './data/mockData';
 import { wsService } from './services/websocket';
@@ -18,7 +17,6 @@ export function App() {
 
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
 
-  // Connect WebSocket automatically when user is logged in
   useEffect(() => {
     if (currentUser) {
       wsService.connect({
@@ -57,7 +55,6 @@ export function App() {
         />
       ) : (
         <div className="h-dvh w-dvw flex items-center justify-center bg-[#0b141a] text-slate-100 p-4">
-          {/* Agar tera alag Login component hai toh yahan render hoga */}
           <div className="text-center space-y-4">
             <h1 className="text-2xl font-bold text-emerald-500">ChatNova Secure Enclave</h1>
             <p className="text-xs text-slate-400">Please select a profile to login:</p>
@@ -77,9 +74,11 @@ export function App() {
         </div>
       )}
 
-      {showMasterAdmin && (
-        <MasterAdminModal onClose={() => setShowMasterAdmin(false)} />
-      )}
+      <MasterAdminPanel
+        isOpen={showMasterAdmin}
+        onClose={() => setShowMasterAdmin(false)}
+        currentUser={currentUser}
+      />
     </ThemeProvider>
   );
 }
