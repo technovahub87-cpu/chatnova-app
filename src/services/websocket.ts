@@ -6,7 +6,7 @@ class WebSocketService {
 
   connect(userData?: { userId?: string; customId?: string }) {
     if (this.socket && this.socket.connected) {
-      return;
+      return this.socket;
     }
 
     const BACKEND_URL = 'https://chatnova-app-n20j.onrender.com';
@@ -17,12 +17,10 @@ class WebSocketService {
       transports: ['websocket', 'polling'],
       withCredentials: true,
       reconnection: true,
-      reconnectionAttempts: Infinity,
-      reconnectionDelay: 1000,
     });
 
     this.socket.on('connect', () => {
-      console.log('[ChatNova WS] Connected successfully with ID:', this.socket?.id);
+      console.log('[ChatNova WS] Connected successfully! ID:', this.socket?.id);
       if (userData) {
         this.socket?.emit('auth:init', userData);
       }
@@ -32,23 +30,15 @@ class WebSocketService {
       console.log('[ChatNova WS] Disconnected:', reason);
     });
 
-    this.socket.on('connect_error', (err) => {
-      console.error('[ChatNova WS] Connection error:', err.message);
-    });
-
-    // Global event dispatcher for registered listeners
+    // Global listener dispatcher
     this.socket.onAny((event, ...args) => {
       const callbacks = this.listeners.get(event);
       if (callbacks) {
-        callbacks.forEach((cb) => {
-          try {
-            cb(...args);
-          } catch (err) {
-            console.error(`Error in listener for event ${event}:`, err);
-          }
-        });
+        callbacks.forEach((cb) => cb(...args));
       }
     });
+
+    return this.socket;
   }
 
   on(event: string, callback: Function) {
@@ -62,10 +52,7 @@ class WebSocketService {
     }
 
     return () => {
-      const set = this.listeners.get(event);
-      if (set) {
-        set.delete(callback);
-      }
+      this.listeners.get(event)?.delete(callback);
       if (this.socket) {
         this.socket.off(event, callback as any);
       }
@@ -76,12 +63,10 @@ class WebSocketService {
     if (this.socket && this.socket.connected) {
       this.socket.emit(event, data);
     } else {
-      console.warn('[ChatNova WS] Socket not connected. Attempting to queue/send:', event);
-      // Try connecting if not connected
       this.connect();
       setTimeout(() => {
         this.socket?.emit(event, data);
-      }, 1000);
+      }, 800);
     }
   }
 
@@ -92,7 +77,10 @@ class WebSocketService {
 
 export const wsService = new WebSocketService();
 
-// Attach globally for debugging in F12 console
+// Force bind globally so F12 console can check it directly
 if (typeof window !== 'undefined') {
   (window as any).wsService = wsService;
+  (window as any).checkSocket = () => {
+    return wsService.socket ? wsService.socket.connected : false;
+  };
 }
