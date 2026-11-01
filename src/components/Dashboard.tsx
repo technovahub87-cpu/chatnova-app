@@ -253,7 +253,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     });
   };
 
-  const handleCreateNewChat = (e: React.FormEvent) => {
+ const handleCreateNewChat = (e: React.FormEvent) => {
     e.preventDefault();
     setNewChatError('');
     const rawInput = newChatCustomId.trim().toLowerCase();
@@ -285,7 +285,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
 
     if (!foundUser) {
       foundUser = {
-        id: 'user_' + Math.random().toString(36).substring(2, 9),
+        id: 'user_' + formattedId.replace('@', ''),
         customId: formattedId,
         displayName: formattedId.replace('@', '').toUpperCase(),
         avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
@@ -303,7 +303,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       } catch (e) {}
     }
 
-    const deterministicChatId = [currentUser.id, foundUser.id].sort().join('_');
+    // 100% Deterministic Chat ID based on Custom IDs (Identical across all clients)
+    const sortedCustomIds = [currentUser.customId || currentUser.id, foundUser.customId].sort();
+    const deterministicChatId = `chat_${sortedCustomIds[0]}_${sortedCustomIds[1]}`.replace(/[@.]/g, '_');
 
     const existing = chats.find((c) => !c.isGroup && c.id === deterministicChatId);
     if (existing) {
@@ -314,6 +316,22 @@ export const Dashboard: React.FC<DashboardProps> = ({
       return;
     }
 
+    const newChat: Chat = {
+      id: deterministicChatId,
+      participant: foundUser,
+      isGroup: false,
+      unreadCount: 0,
+      isPinned: false,
+      isMuted: false,
+      encryptionFingerprint: foundUser.publicKeyFingerprint || generateFingerprint(foundUser.id),
+    };
+
+    setChats([newChat, ...chats]);
+    setActiveChatId(newChat.id);
+    setShowNewChatModal(false);
+    setNewChatCustomId('');
+    setActiveTab('chats');
+  };
     const newChat: Chat = {
       id: deterministicChatId,
       participant: foundUser,
