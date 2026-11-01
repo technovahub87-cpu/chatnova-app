@@ -8,12 +8,17 @@ class WebSocketClient {
   private socket: Socket | null = null;
   private listeners: Map<string, Set<EventHandler>> = new Map();
   private isConnected: boolean = false;
+  private lastAuthData: { userId: string; customId: string } | null = null;
 
   public getStatus() {
     return { connected: this.isConnected, url: this.socketUrl };
   }
 
   public connect(authData?: { userId: string; customId: string }): Promise<boolean> {
+    if (authData) {
+      this.lastAuthData = authData;
+    }
+
     return new Promise((resolve) => {
       try {
         const token = getAuthToken();
@@ -24,13 +29,17 @@ class WebSocketClient {
         this.socket = socketIO(this.socketUrl, {
           transports: ['polling', 'websocket'],
           reconnection: true,
-          auth: { token, ...(authData || {}) },
+          reconnectionAttempts: Infinity,
+          reconnectionDelay: 1000,
+          timeout: 20000,
+          auth: { token, ...(authData || this.lastAuthData || {}) },
         });
 
         this.socket.on('connect', () => {
           this.isConnected = true;
-          if (authData) {
-            this.socket?.emit('auth:init', authData);
+          const currentAuth = authData || this.lastAuthData;
+          if (currentAuth) {
+            this.socket?.emit('auth:init', currentAuth);
           }
           resolve(true);
         });
@@ -40,6 +49,10 @@ class WebSocketClient {
           this.socket?.on(ev, (data) => {
             this.notifyListeners(ev, data);
           });
+        });
+
+        this.socket.on('disconnect', () => {
+          this.isConnected = false;
         });
 
         this.socket.on('connect_error', () => {
@@ -90,8 +103,16 @@ class WebSocketClient {
     if (!event) return;
     if (this.socket && this.socket.connected) {
       this.socket.emit(event, payload);
+    } else {
+      // Auto reconnect attempt if socket dropped due to sleep mode
+      if (this.lastAuthData) {
+        this.connect(this.lastAuthData).then((success) => {
+          if (success && this.socket) {
+            this.socket.emit(event, payload);
+          }
+        });
+      }
     }
-    this.notifyListeners(event, payload);
   }
 
   public send(event: string, payload: any) {
