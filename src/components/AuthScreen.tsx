@@ -20,11 +20,11 @@ import { ThemeToggle } from './ThemeToggle';
 import { wsService } from '../services/websocket';
 
 interface AuthScreenProps {
-  onLoginSuccess: (user: UserType) => void;
+  onLogin: (user: UserType) => void;
   onOpenMasterAdmin: () => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMasterAdmin }) => {
+export const AuthScreen: React.FC<AuthScreenProps> = ({ onLogin, onOpenMasterAdmin }) => {
   const { isDark } = useTheme();
   const [isRegisterMode, setIsRegisterMode] = useState(false);
   const [customId, setCustomId] = useState('');
@@ -127,12 +127,6 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
   };
 
   const handleVerifyOtp = (providedCode?: string) => {
-    const code = providedCode || otpDigits.join('');
-    if (code.length < 6) {
-      setErrorMsg('Please enter the full 6-digit security code.');
-      return;
-    }
-
     setIsVerifying(true);
     setErrorMsg('');
 
@@ -173,7 +167,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
           userId: newUser.id,
           customId: newUser.customId || cleanId,
         });
-        onLoginSuccess(newUser);
+        onLogin(newUser);
       } else {
         const existingRecord = registeredUsersMap[cleanId];
         const foundInitial = Array.isArray(INITIAL_USERS) ? INITIAL_USERS.find(u => u && u.customId && u.customId.toLowerCase() === cleanId) : null;
@@ -198,7 +192,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             userId: userToLog.id,
             customId: userToLog.customId || cleanId,
           });
-          onLoginSuccess(userToLog);
+          onLogin(userToLog);
         } else {
           const fallbackUser: UserType = {
             id: 'user_' + cleanId.replace('@', ''),
@@ -212,10 +206,10 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
             userId: fallbackUser.id,
             customId: fallbackUser.customId,
           });
-          onLoginSuccess(fallbackUser);
+          onLogin(fallbackUser);
         }
       }
-    }, 500);
+    }, 300);
   };
 
   return (
@@ -539,7 +533,7 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onLoginSuccess, onOpenMa
 
             <button
               type="button"
-              onClick={() => handleVerifyOtp(generatedOtp)}
+              onClick={() => handleVerifyOtp()}
               className="mt-3 text-[11px] text-emerald-500 hover:underline font-mono cursor-pointer"
             >
               [Quick Fill Simulated OTP: {generatedOtp}]
