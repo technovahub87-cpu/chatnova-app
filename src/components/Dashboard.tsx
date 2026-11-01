@@ -123,7 +123,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
-  // Helper to compute deterministic chat ID between two users
   const getDeterministicChatId = (id1: string, id2: string) => {
     const clean1 = id1.toLowerCase().replace('@', '');
     const clean2 = id2.toLowerCase().replace('@', '');
@@ -132,6 +131,10 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   useEffect(() => {
+    if (currentUser && currentUser.customId) {
+      wsService.emit('chat:join', currentUser.customId);
+    }
+
     const unsubMsg = wsService.on('chat:new_message', (newMsg: any) => {
       if (!newMsg) return;
       
@@ -141,7 +144,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
       }
       if (!cId) cId = 'chat_default';
 
-      // Ensure socket joins this room dynamically
       wsService.emit('chat:join', cId);
 
       setMessagesMap((prev) => {
@@ -213,13 +215,14 @@ export const Dashboard: React.FC<DashboardProps> = ({
       unsubStatus();
       unsubBroadcast();
     };
-  }, [activeChatId, currentUser.id]);
+  }, [activeChatId, currentUser]);
 
   const handleSendMessage = (msgData: Partial<Message>) => {
     if (!activeChatId) return;
 
     const currentChat = chats.find((c) => c.id === activeChatId);
-    const targetRecipientId = currentChat?.participant?.id || currentChat?.participant?.customId;
+    const targetRecipientCustomId = currentChat?.participant?.customId;
+    const targetRecipientId = currentChat?.participant?.id;
 
     const fullMsg: Message = {
       id: msgData.id || ('msg_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6)),
@@ -246,6 +249,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
     wsService.send('chat:send_message', {
       chatId: activeChatId,
       recipientId: targetRecipientId,
+      recipientCustomId: targetRecipientCustomId,
       senderId: currentUser?.id,
       senderCustomId: currentUser?.customId,
       senderName: currentUser?.displayName,
