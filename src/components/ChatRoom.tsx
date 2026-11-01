@@ -66,8 +66,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   useEffect(() => {
     if (chat && chat.id) {
       wsService.emit('chat:join', chat.id);
+      if (chat.participant?.customId) {
+        wsService.emit('chat:join', chat.participant.customId);
+      }
     }
-  }, [chat?.id]);
+  }, [chat?.id, chat?.participant?.customId]);
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -230,7 +233,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           const isMe = msg.senderId === currentUser.id;
           return (
             <div key={msg.id || idx} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%]] sm:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm relative text-xs sm:text-sm ${
+              <div className={`max-w-[75%] sm:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm relative text-xs sm:text-sm ${
                 isMe
                   ? isDark ? 'bg-[#005c4b] text-white rounded-tr-none' : 'bg-[#d9fdd3] text-slate-900 rounded-tr-none'
                   : isDark ? 'bg-[#202c33] text-slate-100 rounded-tl-none' : 'bg-white text-slate-900 rounded-tl-none'
