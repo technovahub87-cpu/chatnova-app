@@ -123,15 +123,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
     }
   };
 
+  // Helper to compute deterministic chat ID between two users
+  const getDeterministicChatId = (id1: string, id2: string) => {
+    const clean1 = id1.toLowerCase().replace('@', '');
+    const clean2 = id2.toLowerCase().replace('@', '');
+    const sorted = [clean1, clean2].sort();
+    return `chat_${sorted[0]}_${sorted[1]}`;
+  };
+
   useEffect(() => {
     const unsubMsg = wsService.on('chat:new_message', (newMsg: any) => {
       if (!newMsg) return;
       
       let cId = newMsg.chatId;
       if (!cId && newMsg.senderId && currentUser?.id) {
-        cId = [newMsg.senderId, currentUser.id].sort().join('_');
+        cId = getDeterministicChatId(newMsg.senderId, currentUser.id);
       }
       if (!cId) cId = 'chat_default';
+
+      // Ensure socket joins this room dynamically
+      wsService.emit('chat:join', cId);
 
       setMessagesMap((prev) => {
         const currentList = prev[cId] || [];
@@ -296,8 +307,9 @@ export const Dashboard: React.FC<DashboardProps> = ({
       } catch (e) {}
     }
 
-    const sortedCustomIds = [currentUser.customId || currentUser.id, foundUser.customId].sort();
-    const deterministicChatId = `chat_${sortedCustomIds[0]}_${sortedCustomIds[1]}`.replace(/[@.]/g, '_');
+    const deterministicChatId = getDeterministicChatId(currentUser.customId || currentUser.id, foundUser.customId);
+
+    wsService.emit('chat:join', deterministicChatId);
 
     const existing = chats.find((c) => !c.isGroup && c.id === deterministicChatId);
     if (existing) {
@@ -326,6 +338,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   };
 
   const handleCreateGroup = (newGroupChat: Chat) => {
+    wsService.emit('chat:join', newGroupChat.id);
     setChats([newGroupChat, ...chats]);
     setActiveChatId(newGroupChat.id);
     if (newGroupChat.lastMessage) {
@@ -626,6 +639,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   key={chat.id}
                   onClick={() => {
                     setActiveChatId(chat.id);
+                    wsService.emit('chat:join', chat.id);
                     setChats((prev) =>
                       prev.map((c) => (c.id === chat.id ? { ...c, unreadCount: 0 } : c))
                     );
@@ -855,7 +869,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
             </div>
 
             <p className={`text-xs mb-4 ${isDark ? 'text-slate-400' : 'text-slate-600'}`}>
-              Enter the recipient's secure Custom ID (e.g., <span className="font-mono text-emerald-500 font-bold">@ritesh_84</span> or <span className="font-mono text-emerald-500 font-bold">@narendra_56</span>) to establish a direct ratcheted channel.
+              Enter the recipient's secure Custom ID (e.g., <span className="font-mono text-emerald-500 font-bold">@ritesh_83</span> or <span className="font-mono text-emerald-500 font-bold">@deepak_123</span>) to establish a direct ratcheted channel.
             </p>
 
             <form onSubmit={handleCreateNewChat} className="space-y-4">
@@ -869,7 +883,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                     type="text"
                     value={newChatCustomId}
                     onChange={(e) => setNewChatCustomId(e.target.value)}
-                    placeholder="username_84"
+                    placeholder="username_83"
                     autoFocus
                     required
                     className={`w-full rounded-2xl pl-8 pr-4 py-3 text-sm transition focus:outline-none focus:ring-2 focus:ring-emerald-500 border ${
