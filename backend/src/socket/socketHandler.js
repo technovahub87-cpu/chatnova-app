@@ -6,7 +6,17 @@ module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('User connected with socket ID:', socket.id);
 
-    // User authentication and mapping
+    // Extract auth data from handshake auth or query if available
+    const initialAuth = socket.handshake.auth || socket.handshake.query;
+    if (initialAuth && (initialAuth.userId || initialAuth.customId)) {
+      const uId = initialAuth.userId || initialAuth.customId;
+      onlineUsers.set(String(uId), socket.id);
+      onlineUsers.set(String(uId).toLowerCase(), socket.id);
+      socket.join(String(uId));
+      console.log(`Auto-Authenticated via handshake: ${uId} -> ${socket.id}`);
+    }
+
+    // User authentication and mapping event
     socket.on('auth:init', (data) => {
       if (data) {
         const uId = data.userId || data.customId;
@@ -23,6 +33,7 @@ module.exports = (io) => {
     socket.on('chat:join', (chatId) => {
       if (chatId) {
         socket.join(chatId);
+        console.log(`Socket ${socket.id} joined chat room: ${chatId}`);
       }
     });
 
@@ -68,18 +79,22 @@ module.exports = (io) => {
           const recipientSocketId = onlineUsers.get(String(recipientId)) || onlineUsers.get(String(recipientId).toLowerCase());
           if (recipientSocketId) {
             io.to(recipientSocketId).emit('chat:new_message', payload);
+            console.log(`Delivered to recipient socket: ${recipientSocketId}`);
           }
-          // Also emit to recipient's personal room
+          // Also emit to recipient's personal room (guaranteed delivery if joined)
           io.to(String(recipientId)).emit('chat:new_message', payload);
         }
 
-        // 3. Emit to chat room
+        // 3. Emit to chat room (so both participants in room get it)
         if (chatId) {
           socket.to(chatId).emit('chat:new_message', payload);
         }
 
-        // 4. Global broadcast fallback for instant sync across browsers
+        // 4. Send back confirmation/echo to sender as well if needed, or broadcast fallback
+        socket.emit('chat:message_sent', payload);
         socket.broadcast.emit('chat:new_message', payload);
+
+        console.log(`[Message Sent] From ${senderId} to ${recipientId || chatId}`);
 
       } catch (err) {
         console.error('Error saving or sending message:', err);
