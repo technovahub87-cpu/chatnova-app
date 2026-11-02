@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 
 const http = require('http');
@@ -7,9 +6,12 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
+const mongoose = require('mongoose');
 const { Server } = require('socket.io');
 
 const connectDB = require('./config/db');
+const User = require('./models/User');
+
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
@@ -21,6 +23,82 @@ const server = http.createServer(app);
 
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
+
+let masterBootstrapRunning = false;
+
+const bootstrapMasterAdmin = async () => {
+  if (masterBootstrapRunning) return;
+
+  const configuredId = String(
+    process.env.MASTER_ADMIN_CUSTOM_ID || ''
+  ).trim().toLowerCase();
+
+  if (!configuredId) {
+    console.warn('[ChatNova] MASTER_ADMIN_CUSTOM_ID is not configured.');
+    return;
+  }
+
+  const customId = configuredId.startsWith('@')
+    ? configuredId
+    : `@${configuredId}`;
+
+  if (!/^@[a-z0-9_]{3,24}$/.test(customId)) {
+    console.error('[ChatNova] Invalid MASTER_ADMIN_CUSTOM_ID format.');
+    return;
+  }
+
+  masterBootstrapRunning = true;
+
+  try {
+    const targetUser = await User.findOne({
+      customId,
+      mobileVerified: true,
+      authenticatorEnabled: true,
+      isBanned: false
+    });
+
+    if (!targetUser) {
+      console.log(
+        '[ChatNova] Master Admin account is not registered and fully verified yet.'
+      );
+      return;
+    }
+
+    if (targetUser.role === 'master_admin') {
+      console.log('[ChatNova] Configured Master Admin is already active.');
+      return;
+    }
+
+    const existingMaster = await User.findOne({
+      role: 'master_admin'
+    });
+
+    if (existingMaster) {
+      console.error(
+        '[ChatNova] Another Master Admin already exists. Automatic promotion stopped.'
+      );
+      return;
+    }
+
+    targetUser.role = 'master_admin';
+    await targetUser.save();
+
+    console.log(
+      `[ChatNova] Master Admin successfully configured for ${customId}.`
+    );
+  } catch (error) {
+    console.error(
+      '[ChatNova] Master Admin setup failed:',
+      error.message
+    );
+  } finally {
+    masterBootstrapRunning = false;
+  }
+};
+
+mongoose.connection.on('connected', () => {
+  bootstrapMasterAdmin();
+});
 
 connectDB();
 
