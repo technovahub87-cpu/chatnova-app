@@ -1,6 +1,8 @@
 
 const crypto = require('crypto');
+const jwt = require('jsonwebtoken');
 const speakeasy = require('speakeasy');
+const User = require('../models/User');
 
 const safeCompare = (first, second) => {
   if (typeof first !== 'string' || typeof second !== 'string') {
@@ -10,48 +12,84 @@ const safeCompare = (first, second) => {
   const a = Buffer.from(first);
   const b = Buffer.from(second);
 
-  if (a.length !== b.length || a.length === 0) {
-    return false;
-  }
-
-  return crypto.timingSafeEqual(a, b);
+  return (
+    a.length > 0 &&
+    a.length === b.length &&
+    crypto.timingSafeEqual(a, b)
+  );
 };
 
-const masterAdminProtect = (req, res, next) => {
+const masterAdminProtect = async (req, res, next) => {
   try {
+    const jwtSecret = process.env.JWT_SECRET;
     const adminSecret = process.env.MASTER_ADMIN_SECRET;
     const totpSecret = process.env.MASTER_ADMIN_TOTP_SECRET;
 
-    // Never use hardcoded fallback credentials.
-    if (!adminSecret || !totpSecret) {
-      console.error('[Master Admin] Required environment secrets are missing.');
-
+    if (!jwtSecret || !adminSecret || !totpSecret) {
       return res.status(503).json({
         success: false,
         message: 'Master Admin security is not configured.'
       });
     }
 
-    // Credentials must be sent through request headers.
-    const suppliedSecret = req.headers['x-master-admin-secret'];
-    const suppliedToken = req.headers['x-master-2fa-token'];
+    // First verify the logged-in ChatNova account.
+    const authHeader = req.headers.authorization;
 
     if (
-      typeof suppliedSecret !== 'string' ||
-      typeof suppliedToken !== 'string'
+      typeof authHeader !== 'string' ||
+      !authHeader.startsWith('Bearer ')
     ) {
       return res.status(401).json({
         success: false,
-        message: 'Master Admin credentials are required.'
+        message: 'ChatNova login is required.'
       });
     }
 
-    const secretValid = safeCompare(
-      suppliedSecret,
-      adminSecret
-    );
+    const token = authHeader.substring(7).trim();
+    const decoded = jwt.verify(token, jwtSecret);
+
+    if (!decoded || !decoded.id) {
+      return res.status(401).json({
+        success: false,
+        message: 'Invalid login session.'
+      });
+    }
+
+    const user = await User.findById(decoded.id);
+
+    if (!user || user.isBanned) {
+      return res.status(403).json({
+        success: false,
+        message: 'Account access denied.'
+      });
+    }
+
+    if (
+      decoded.tokenVersion !== undefined &&
+      decoded.tokenVersion !== (user.tokenVersion || 0)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Login session has expired.'
+      });
+    }
+
+    // Only the designated Master Admin account may continue.
+    if (user.role !== 'master_admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Master Admin account required.'
+      });
+    }
+
+    // Verify the additional Master Admin credentials.
+    const suppliedSecret = req.headers['x-master-admin-secret'];
+    const suppliedToken = req.headers['x-master-2fa-token'];
+
+    const secretValid = safeCompare(suppliedSecret, adminSecret);
 
     const tokenValid =
+      typeof suppliedToken === 'string' &&
       /^\d{6}$/.test(suppliedToken) &&
       speakeasy.totp.verify({
         secret: totpSecret,
@@ -67,6 +105,7 @@ const masterAdminProtect = (req, res, next) => {
       });
     }
 
+    req.user = user;
     return next();
 
   } catch (error) {
@@ -75,9 +114,9 @@ const masterAdminProtect = (req, res, next) => {
       error instanceof Error ? error.message : String(error)
     );
 
-    return res.status(500).json({
+    return res.status(401).json({
       success: false,
-      message: 'Administrative verification failed.'
+      message: 'Master Admin verification failed.'
     });
   }
 };
