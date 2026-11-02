@@ -11,7 +11,8 @@ import {
   AlertCircle,
   Camera,
   Trash2,
-  ShieldCheck
+  ShieldCheck,
+  Smartphone
 } from 'lucide-react';
 
 import { User as ChatNovaUser } from '../types';
@@ -19,6 +20,7 @@ import { authAPI, API_BASE_URL } from '../services/api';
 import { profileImageAPI } from '../services/profileImageAPI';
 import { useTheme } from '../context/ThemeContext';
 import PrivacySettings from './PrivacySettings';
+import LinkedDevicesSettings from './LinkedDevicesSettings';
 
 interface ProfileSettingsProps {
   currentUser: ChatNovaUser;
@@ -34,6 +36,8 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const { isDark } = useTheme();
 
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showLinkedDevices, setShowLinkedDevices] = useState(false);
+
   const [displayName, setDisplayName] = useState(
     currentUser.displayName || ''
   );
@@ -216,255 +220,286 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
     photoPreview || resolveAvatarUrl(currentUser.avatar);
 
   return (
-    <div
-      className={`fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 ${
-        isDark ? 'bg-black/70' : 'bg-slate-900/40'
-      }`}
-    >
+    <>
       <div
-        className={`w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-2xl border shadow-2xl ${
-          isDark
-            ? 'bg-[#111b21] border-slate-700 text-white'
-            : 'bg-white border-slate-200 text-slate-900'
+        className={`fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 ${
+          isDark ? 'bg-black/70' : 'bg-slate-900/40'
         }`}
       >
-        <header
-          className={`sticky top-0 z-10 flex items-center gap-3 p-4 border-b ${
+        <div
+          className={`w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-2xl border shadow-2xl ${
             isDark
-              ? 'bg-[#202c33] border-slate-700'
-              : 'bg-slate-50 border-slate-200'
+              ? 'bg-[#111b21] border-slate-700 text-white'
+              : 'bg-white border-slate-200 text-slate-900'
           }`}
         >
-          <button
-            type="button"
-            onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-500/20"
-            aria-label="Back"
-          >
-            <ArrowLeft className="w-5 h-5" />
-          </button>
-
-          <div>
-            <h2 className="font-bold text-lg">Profile</h2>
-            <p className="text-xs text-slate-400">
-              Manage your ChatNova information
-            </p>
-          </div>
-        </header>
-
-        <form onSubmit={handleSave} className="p-5 space-y-5">
-          <button
-            type="button"
-            onClick={() => setShowPrivacy(true)}
-            className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
+          <header
+            className={`sticky top-0 z-10 flex items-center gap-3 p-4 border-b ${
               isDark
-                ? 'border-slate-700 bg-[#202c33]'
-                : 'border-slate-200 bg-slate-50'
+                ? 'bg-[#202c33] border-slate-700'
+                : 'bg-slate-50 border-slate-200'
             }`}
           >
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-              <ShieldCheck className="w-5 h-5 text-emerald-500" />
-            </div>
-            <div className="flex-1">
-              <p className="text-sm font-semibold">Privacy & Security</p>
-              <p className="text-xs text-slate-400 mt-1">
-                Last Seen, Profile Photo, Read Receipts and more
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-full hover:bg-slate-500/20"
+              aria-label="Back"
+            >
+              <ArrowLeft className="w-5 h-5" />
+            </button>
+
+            <div>
+              <h2 className="font-bold text-lg">Profile</h2>
+              <p className="text-xs text-slate-400">
+                Manage your ChatNova information
               </p>
             </div>
-            <span className="text-emerald-500 text-sm font-semibold">
-              Open
-            </span>
-          </button>
+          </header>
 
-          <div className="flex flex-col items-center py-3">
-            <div className="relative">
-              <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
-                {visiblePhoto ? (
-                  <img
-                    src={visiblePhoto}
-                    alt="Profile"
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <User className="w-14 h-14 text-white" />
-                )}
-              </div>
-
-              <label
-                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center cursor-pointer border-2 border-white"
-                title="Choose profile photo"
-              >
-                <Camera className="w-4 h-4" />
-                <input
-                  type="file"
-                  accept="image/jpeg,image/png,image/webp"
-                  onChange={handlePhotoSelect}
-                  className="hidden"
-                />
-              </label>
-            </div>
-
-            <p className="font-semibold mt-3">
-              {currentUser.displayName}
-            </p>
-
-            <p className="text-xs text-emerald-500 mt-1">
-              {currentUser.customId}
-            </p>
-
-            <p className="text-[11px] text-slate-400 mt-2">
-              JPG, PNG or WEBP · Maximum 2 MB
-            </p>
-
-            {selectedFile && (
-              <div className="flex gap-2 mt-3">
-                <button
-                  type="button"
-                  onClick={handlePhotoUpload}
-                  disabled={photoSaving}
-                  className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2"
-                >
-                  {photoSaving ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <Camera className="w-4 h-4" />
-                  )}
-                  {photoSaving ? 'Uploading...' : 'Upload Photo'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setSelectedFile(null);
-                    setPhotoPreview('');
-                  }}
-                  className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
-                >
-                  Cancel
-                </button>
-              </div>
-            )}
-
-            {!selectedFile && currentUser.avatar && (
-              <button
-                type="button"
-                onClick={handleRemovePhoto}
-                disabled={removingPhoto}
-                className="flex items-center gap-2 mt-3 text-sm text-rose-500 hover:text-rose-400 disabled:opacity-60"
-              >
-                {removingPhoto ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-                Remove Photo
-              </button>
-            )}
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-semibold mb-2">
-              <User className="w-4 h-4 text-emerald-500" />
-              Display Name
-            </label>
-
-            <input
-              type="text"
-              value={displayName}
-              onChange={event => setDisplayName(event.target.value)}
-              maxLength={50}
-              required
-              placeholder="Enter your name"
-              className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-emerald-500 ${
+          <form onSubmit={handleSave} className="p-5 space-y-5">
+            <button
+              type="button"
+              onClick={() => setShowPrivacy(true)}
+              className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
                 isDark
-                  ? 'bg-[#202c33] border-slate-700 text-white'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
-              }`}
-            />
-
-            <p className="text-right text-[10px] text-slate-400 mt-1">
-              {displayName.length}/50
-            </p>
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-semibold mb-2">
-              <AtSign className="w-4 h-4 text-emerald-500" />
-              ChatNova ID
-            </label>
-
-            <div
-              className={`w-full rounded-xl border px-4 py-3 text-sm opacity-70 ${
-                isDark
-                  ? 'bg-[#202c33] border-slate-700'
-                  : 'bg-slate-100 border-slate-200'
+                  ? 'border-slate-700 bg-[#202c33]'
+                  : 'border-slate-200 bg-slate-50'
               }`}
             >
-              {currentUser.customId}
-            </div>
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <ShieldCheck className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Privacy & Security</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Last Seen, Profile Photo, Read Receipts and more
+                </p>
+              </div>
+              <span className="text-emerald-500 text-sm font-semibold">
+                Open
+              </span>
+            </button>
 
-            <p className="text-[10px] text-slate-400 mt-1">
-              Your unique ChatNova ID cannot be changed here.
-            </p>
-          </div>
-
-          <div>
-            <label className="flex items-center gap-2 text-sm font-semibold mb-2">
-              <Info className="w-4 h-4 text-emerald-500" />
-              About
-            </label>
-
-            <textarea
-              value={bio}
-              onChange={event => setBio(event.target.value)}
-              maxLength={160}
-              rows={3}
-              placeholder="Write something about yourself..."
-              className={`w-full rounded-xl border px-4 py-3 outline-none resize-none focus:border-emerald-500 ${
+            <button
+              type="button"
+              onClick={() => setShowLinkedDevices(true)}
+              className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
                 isDark
-                  ? 'bg-[#202c33] border-slate-700 text-white'
-                  : 'bg-slate-50 border-slate-200 text-slate-900'
+                  ? 'border-slate-700 bg-[#202c33]'
+                  : 'border-slate-200 bg-slate-50'
               }`}
-            />
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <Smartphone className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Linked Devices</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  View and remove devices connected to your account
+                </p>
+              </div>
+              <span className="text-emerald-500 text-sm font-semibold">
+                Open
+              </span>
+            </button>
 
-            <p className="text-right text-[10px] text-slate-400 mt-1">
-              {bio.length}/160
-            </p>
-          </div>
+            <div className="flex flex-col items-center py-3">
+              <div className="relative">
+                <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
+                  {visiblePhoto ? (
+                    <img
+                      src={visiblePhoto}
+                      alt="Profile"
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User className="w-14 h-14 text-white" />
+                  )}
+                </div>
 
-          {successMessage && (
-            <div className="flex items-center gap-2 rounded-xl p-3 bg-emerald-500/10 text-emerald-500 text-sm">
-              <CheckCircle className="w-4 h-4 shrink-0" />
-              {successMessage}
+                <label
+                  className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center cursor-pointer border-2 border-white"
+                  title="Choose profile photo"
+                >
+                  <Camera className="w-4 h-4" />
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={handlePhotoSelect}
+                    className="hidden"
+                  />
+                </label>
+              </div>
+
+              <p className="font-semibold mt-3">
+                {currentUser.displayName}
+              </p>
+
+              <p className="text-xs text-emerald-500 mt-1">
+                {currentUser.customId}
+              </p>
+
+              <p className="text-[11px] text-slate-400 mt-2">
+                JPG, PNG or WEBP · Maximum 2 MB
+              </p>
+
+              {selectedFile && (
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={handlePhotoUpload}
+                    disabled={photoSaving}
+                    className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2"
+                  >
+                    {photoSaving ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Camera className="w-4 h-4" />
+                    )}
+                    {photoSaving ? 'Uploading...' : 'Upload Photo'}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSelectedFile(null);
+                      setPhotoPreview('');
+                    }}
+                    className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+
+              {!selectedFile && currentUser.avatar && (
+                <button
+                  type="button"
+                  onClick={handleRemovePhoto}
+                  disabled={removingPhoto}
+                  className="flex items-center gap-2 mt-3 text-sm text-rose-500 hover:text-rose-400 disabled:opacity-60"
+                >
+                  {removingPhoto ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Trash2 className="w-4 h-4" />
+                  )}
+                  Remove Photo
+                </button>
+              )}
             </div>
-          )}
 
-          {errorMessage && (
-            <div className="flex items-center gap-2 rounded-xl p-3 bg-rose-500/10 text-rose-500 text-sm">
-              <AlertCircle className="w-4 h-4 shrink-0" />
-              {errorMessage}
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold mb-2">
+                <User className="w-4 h-4 text-emerald-500" />
+                Display Name
+              </label>
+
+              <input
+                type="text"
+                value={displayName}
+                onChange={event => setDisplayName(event.target.value)}
+                maxLength={50}
+                required
+                placeholder="Enter your name"
+                className={`w-full rounded-xl border px-4 py-3 outline-none focus:border-emerald-500 ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                }`}
+              />
+
+              <p className="text-right text-[10px] text-slate-400 mt-1">
+                {displayName.length}/50
+              </p>
             </div>
-          )}
 
-          <button
-            type="submit"
-            disabled={saving}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-semibold py-3 transition"
-          >
-            {saving ? (
-              <Loader2 className="w-4 h-4 animate-spin" />
-            ) : (
-              <Save className="w-4 h-4" />
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold mb-2">
+                <AtSign className="w-4 h-4 text-emerald-500" />
+                ChatNova ID
+              </label>
+
+              <div
+                className={`w-full rounded-xl border px-4 py-3 text-sm opacity-70 ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700'
+                    : 'bg-slate-100 border-slate-200'
+                }`}
+              >
+                {currentUser.customId}
+              </div>
+
+              <p className="text-[10px] text-slate-400 mt-1">
+                Your unique ChatNova ID cannot be changed here.
+              </p>
+            </div>
+
+            <div>
+              <label className="flex items-center gap-2 text-sm font-semibold mb-2">
+                <Info className="w-4 h-4 text-emerald-500" />
+                About
+              </label>
+
+              <textarea
+                value={bio}
+                onChange={event => setBio(event.target.value)}
+                maxLength={160}
+                rows={3}
+                placeholder="Write something about yourself..."
+                className={`w-full rounded-xl border px-4 py-3 outline-none resize-none focus:border-emerald-500 ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700 text-white'
+                    : 'bg-slate-50 border-slate-200 text-slate-900'
+                }`}
+              />
+
+              <p className="text-right text-[10px] text-slate-400 mt-1">
+                {bio.length}/160
+              </p>
+            </div>
+
+            {successMessage && (
+              <div className="flex items-center gap-2 rounded-xl p-3 bg-emerald-500/10 text-emerald-500 text-sm">
+                <CheckCircle className="w-4 h-4 shrink-0" />
+                {successMessage}
+              </div>
             )}
-            {saving ? 'Saving Profile...' : 'Save Changes'}
-          </button>
-        </form>
+
+            {errorMessage && (
+              <div className="flex items-center gap-2 rounded-xl p-3 bg-rose-500/10 text-rose-500 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                {errorMessage}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={saving}
+              className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white font-semibold py-3 transition"
+            >
+              {saving ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Save className="w-4 h-4" />
+              )}
+              {saving ? 'Saving Profile...' : 'Save Changes'}
+            </button>
+          </form>
+        </div>
       </div>
 
       {showPrivacy && (
         <PrivacySettings onClose={() => setShowPrivacy(false)} />
       )}
-    </div>
+
+      {showLinkedDevices && (
+        <LinkedDevicesSettings
+          onClose={() => setShowLinkedDevices(false)}
+        />
+      )}
+    </>
   );
 };
 
