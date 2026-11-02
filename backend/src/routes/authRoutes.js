@@ -41,6 +41,11 @@ const {
   completeDevicePairing
 } = require('../controllers/devicePairingController');
 
+const {
+  getNotificationSettings,
+  updateNotificationSettings
+} = require('../controllers/notificationController');
+
 const { protect } = require('../middleware/protect');
 
 // Registration and login
@@ -60,6 +65,10 @@ router.put('/profile', protect, updateProfile);
 // Privacy settings
 router.get('/privacy', protect, getPrivacySettings);
 router.put('/privacy', protect, updatePrivacySettings);
+
+// Notification settings
+router.get('/notifications', protect, getNotificationSettings);
+router.put('/notifications', protect, updateNotificationSettings);
 
 // Linked devices and sessions
 router.get('/sessions', protect, getMySessions);
