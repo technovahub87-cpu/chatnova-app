@@ -1,8 +1,8 @@
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
-export type MessageType = 'text' | 'voice' | 'image' | 'file' | 'system';
+export type MessageType = 'text' | 'voice' | 'image' | 'file' | 'document' | 'system';
 
 export interface VoiceData {
-  duration: number; // in seconds
+  duration: number;
   waveform: number[];
   audioUrl?: string;
 }
@@ -32,13 +32,13 @@ export interface Message {
     senderName: string;
     content: string;
   };
-  reactions?: { [emoji: string]: string[] }; // emoji -> array of userIds
+  reactions?: { [emoji: string]: string[] };
   isDisappearing?: boolean;
 }
 
 export interface User {
   id: string;
-  customId: string; // e.g. @alex_sec
+  customId: string;
   displayName: string;
   avatar: string;
   bio: string;
@@ -97,7 +97,7 @@ export interface AuditLog {
   action: string;
   targetUser: string;
   actor: string;
-  ipAddress: string;
+  ipAddress?: string;
   severity: 'low' | 'medium' | 'high' | 'critical';
   details: string;
 }
@@ -105,10 +105,13 @@ export interface AuditLog {
 export interface ServerNode {
   id: string;
   location: string;
+  region?: string;
   endpoint: string;
   latencyMs: number;
-  status: 'healthy' | 'degraded' | 'offline';
+  latency?: string;
+  status: 'healthy' | 'degraded' | 'offline' | 'operational';
   activeTunnels: number;
+  connections?: number;
 }
 
 export interface LinkedDevice {
