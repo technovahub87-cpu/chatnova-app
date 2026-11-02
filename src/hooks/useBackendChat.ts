@@ -20,40 +20,50 @@ export const useBackendChat = (currentUser: User) => {
   const refreshChats = useCallback(async () => {
     setLoadingChats(true);
 
-    const result = await loadBackendChats(currentUser);
+    try {
+      const result = await loadBackendChats(currentUser);
 
-    if (result.success) {
-      setChats(result.chats);
-      setBackendError('');
-    } else {
-      setBackendError(
-        result.message || 'Unable to load your conversations.'
-      );
+      if (result.success) {
+        setChats(result.chats);
+        setBackendError('');
+      } else {
+        setBackendError(
+          result.message || 'Unable to load conversations.'
+        );
+      }
+    } catch {
+      setBackendError('Unable to connect to ChatNova server.');
+    } finally {
+      setLoadingChats(false);
     }
-
-    setLoadingChats(false);
   }, [currentUser]);
 
   const refreshMessages = useCallback(
     async (conversationId: string) => {
       if (!conversationId) return;
 
-      const result = await loadBackendMessages(
-        conversationId,
-        currentUser
-      );
-
-      if (!result.success) {
-        setBackendError(
-          result.message || 'Unable to load messages.'
+      try {
+        const result = await loadBackendMessages(
+          conversationId,
+          currentUser
         );
-        return;
-      }
 
-      setMessagesMap((previous) => ({
-        ...previous,
-        [conversationId]: result.messages
-      }));
+        if (!result.success) {
+          setBackendError(
+            result.message || 'Unable to load messages.'
+          );
+          return;
+        }
+
+        setMessagesMap((previous) => ({
+          ...previous,
+          [conversationId]: result.messages
+        }));
+
+        setBackendError('');
+      } catch {
+        setBackendError('Unable to load conversation messages.');
+      }
     },
     [currentUser]
   );
@@ -69,53 +79,60 @@ export const useBackendChat = (currentUser: User) => {
         };
       }
 
-      const result = await sendBackendTextMessage(
-        conversationId,
-        cleanContent
-      );
+      try {
+        const result = await sendBackendTextMessage(
+          conversationId,
+          cleanContent
+        );
 
-      if (!result.success || !result.data) {
-        return {
-          success: false,
-          message: result.message || 'Message could not be sent.'
-        };
-      }
-
-      const payload: any = result.data;
-      const rawMessage = payload.message || payload;
-
-      const newMessage = mapBackendMessage(
-        rawMessage,
-        currentUser.id
-      );
-
-      setMessagesMap((previous) => {
-        const existing = previous[conversationId] || [];
-
-        if (existing.some((item) => item.id === newMessage.id)) {
-          return previous;
+        if (!result.success || !result.data) {
+          return {
+            success: false,
+            message: result.message || 'Message could not be sent.'
+          };
         }
 
+        const payload: any = result.data;
+        const rawMessage = payload.message || payload;
+
+        const newMessage = mapBackendMessage(
+          rawMessage,
+          currentUser.id
+        );
+
+        setMessagesMap((previous) => {
+          const existing = previous[conversationId] || [];
+
+          if (existing.some((item) => item.id === newMessage.id)) {
+            return previous;
+          }
+
+          return {
+            ...previous,
+            [conversationId]: [...existing, newMessage]
+          };
+        });
+
+        setChats((previous) =>
+          previous.map((chat) =>
+            chat.id === conversationId
+              ? { ...chat, lastMessage: newMessage }
+              : chat
+          )
+        );
+
         return {
-          ...previous,
-          [conversationId]: [...existing, newMessage]
+          success: true,
+          message: 'Message sent.'
         };
-      });
-
-      setChats((previous) =>
-        previous.map((chat) =>
-          chat.id === conversationId
-            ? { ...chat, lastMessage: newMessage }
-            : chat
-        )
-      );
-
-      return {
-        success: true,
-        message: 'Message sent.'
-      };
+      } catch {
+        return {
+          success: false,
+          message: 'Unable to send message. Please try again.'
+        };
+      }
     },
-    [currentUser]
+    [currentUser.id]
   );
 
   useEffect(() => {
@@ -125,10 +142,17 @@ export const useBackendChat = (currentUser: User) => {
   useEffect(() => {
     const unsubscribe = wsService.on(
       'chat:new_message',
-      (rawMessage: any) => {
-        if (!rawMessage?.chatId) return;
+      (eventData: any) => {
+        if (!eventData) return;
 
-        const conversationId = String(rawMessage.chatId);
+        const rawMessage = eventData.message || eventData;
+        const conversationId = String(
+          eventData.conversationId ||
+          rawMessage.chatId ||
+          ''
+        );
+
+        if (!conversationId || !rawMessage._id) return;
 
         const newMessage = mapBackendMessage(
           rawMessage,
