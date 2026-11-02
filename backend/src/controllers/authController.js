@@ -9,13 +9,13 @@ const User = require('../models/User');
 // BASIC HELPERS
 // --------------------------------------------------
 
-const generateToken = (id) => {
+const generateToken = (id, tokenVersion = 0) => {
   if (!process.env.JWT_SECRET) {
     throw new Error('JWT_SECRET is not configured.');
   }
 
   return jwt.sign(
-    { id },
+    { id, tokenVersion },
     process.env.JWT_SECRET,
     { expiresIn: '30d' }
   );
@@ -76,7 +76,6 @@ const normalizeMobileNumber = (value) => {
 
 // --------------------------------------------------
 // AUTHENTICATOR SECRET ENCRYPTION
-// AUTH_ENCRYPTION_KEY must be 64 hexadecimal chars.
 // --------------------------------------------------
 
 const getEncryptionKey = () => {
@@ -93,6 +92,7 @@ const getEncryptionKey = () => {
 
 const encryptSecret = (secret) => {
   const iv = crypto.randomBytes(12);
+
   const cipher = crypto.createCipheriv(
     'aes-256-gcm',
     getEncryptionKey(),
@@ -243,8 +243,6 @@ const verifyRegistrationOtp = async (sessionId, otp) => {
 
 // --------------------------------------------------
 // REGISTER NEW ACCOUNT
-// POST /api/auth/register
-// SMS OTP is sent only during registration.
 // --------------------------------------------------
 
 exports.register = async (req, res) => {
@@ -306,7 +304,6 @@ exports.register = async (req, res) => {
       });
     }
 
-    // Send SMS OTP through 2Factor.
     const sessionId = await sendRegistrationOtp(mobile);
 
     if (!user) {
@@ -326,7 +323,6 @@ exports.register = async (req, res) => {
       user.mobileNumber = mobile;
     }
 
-    // Temporary storage of the 2Factor verification session ID.
     user.registrationOtpHash = sessionId;
     user.registrationOtpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
     user.registrationOtpAttempts = 0;
@@ -353,7 +349,6 @@ exports.register = async (req, res) => {
 
 // --------------------------------------------------
 // VERIFY REGISTRATION SMS OTP
-// POST /api/auth/verify-registration-otp
 // --------------------------------------------------
 
 exports.verifyRegistrationOtp = async (req, res) => {
@@ -421,7 +416,7 @@ exports.verifyRegistrationOtp = async (req, res) => {
 
     await user.save();
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.tokenVersion || 0);
 
     return res.status(200).json({
       success: true,
@@ -442,8 +437,6 @@ exports.verifyRegistrationOtp = async (req, res) => {
 
 // --------------------------------------------------
 // SET UP AUTHENTICATOR APP
-// POST /api/auth/authenticator/setup
-// Protected route
 // --------------------------------------------------
 
 exports.setupAuthenticator = async (req, res) => {
@@ -495,8 +488,6 @@ exports.setupAuthenticator = async (req, res) => {
 
 // --------------------------------------------------
 // VERIFY AUTHENTICATOR SETUP
-// POST /api/auth/authenticator/verify-setup
-// Protected route
 // --------------------------------------------------
 
 exports.verifyAuthenticatorSetup = async (req, res) => {
@@ -558,7 +549,6 @@ exports.verifyAuthenticatorSetup = async (req, res) => {
 
 // --------------------------------------------------
 // LOGIN WITH CUSTOM ID + PASSWORD + AUTHENTICATOR
-// POST /api/auth/login
 // --------------------------------------------------
 
 exports.login = async (req, res) => {
@@ -639,7 +629,7 @@ exports.login = async (req, res) => {
       });
     }
 
-    const token = generateToken(user._id);
+    const token = generateToken(user._id, user.tokenVersion || 0);
 
     return res.status(200).json({
       success: true,
@@ -660,7 +650,6 @@ exports.login = async (req, res) => {
 
 // --------------------------------------------------
 // FORGOT PASSWORD USING AUTHENTICATOR OR RECOVERY CODE
-// POST /api/auth/forgot-password
 // --------------------------------------------------
 
 exports.forgotPassword = async (req, res) => {
@@ -716,8 +705,6 @@ exports.forgotPassword = async (req, res) => {
     }
 
     user.password = newPassword;
-
-    // Invalidate any old sessions at the data level.
     user.tokenVersion = (user.tokenVersion || 0) + 1;
 
     await user.save();
@@ -739,7 +726,6 @@ exports.forgotPassword = async (req, res) => {
 
 // --------------------------------------------------
 // GET CURRENT USER PROFILE
-// GET /api/auth/me
 // --------------------------------------------------
 
 exports.getMe = async (req, res) => {
