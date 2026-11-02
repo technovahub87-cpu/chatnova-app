@@ -1,227 +1,291 @@
+
 /**
- * ChatNova Robust Hybrid API Client (Live + Fallback)
+ * ChatNova Secure API Client
+ * No mock login, no local authentication fallback.
  */
 
-export const API_BASE_URL = 'https://chatnova-app-n20j.onrender.com/api';
+export const API_BASE_URL =
+  'https://chatnova-app-n20j.onrender.com/api';
 
-// Token Storage Helpers
+export interface ApiResponse<T> {
+  success: boolean;
+  data?: T;
+  message?: string;
+  isLiveBackend: boolean;
+}
+
+export interface AdminCredentials {
+  secret: string;
+  authenticatorCode: string;
+}
+
+// --------------------------------------------------
+// AUTH TOKEN STORAGE
+// --------------------------------------------------
+
 export const getAuthToken = (): string | null => {
   try {
     return localStorage.getItem('chatnova_jwt_token');
-  } catch (e) {
+  } catch {
     return null;
   }
 };
 
-export const setAuthToken = (token: string) => {
+export const setAuthToken = (token: string): void => {
   try {
-    if (token) localStorage.setItem('chatnova_jwt_token', token);
-  } catch (e) {}
+    if (token) {
+      localStorage.setItem('chatnova_jwt_token', token);
+    }
+  } catch {
+    // Storage may be unavailable.
+  }
 };
 
-export const removeAuthToken = () => {
+export const removeAuthToken = (): void => {
   try {
     localStorage.removeItem('chatnova_jwt_token');
-  } catch (e) {}
+  } catch {
+    // Storage may be unavailable.
+  }
 };
 
-// Hybrid API Fetch Wrapper with Instant Local Fallback to prevent "Identity not found"
+// --------------------------------------------------
+// CENTRAL API REQUEST
+// --------------------------------------------------
+
 async function apiFetch<T>(
   endpoint: string,
-  options: RequestInit = {}
-): Promise<{ success: boolean; data?: T; message?: string; isLiveBackend?: boolean }> {
-  const method = options.method || 'GET';
-  let body: any = {};
+  options: RequestInit = {},
+  adminCredentials?: AdminCredentials
+): Promise<ApiResponse<T>> {
   try {
-    if (options.body) {
-      body = JSON.parse(options.body as string);
-    }
-  } catch (e) {}
+    const headers = new Headers(options.headers);
 
-  try {
+    headers.set('Content-Type', 'application/json');
+
     const token = getAuthToken();
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-      ...(options.headers as Record<string, string>),
-    };
 
     if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+      headers.set('Authorization', `Bearer ${token}`);
     }
 
-    const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
+    if (adminCredentials) {
+      headers.set(
+        'x-master-admin-secret',
+        adminCredentials.secret
+      );
 
-    const response = await fetch(url, {
-      ...options,
-      headers,
-      signal: AbortSignal.timeout(5000), // 5 seconds timeout so it doesn't hang
-    });
+      headers.set(
+        'x-master-2fa-token',
+        adminCredentials.authenticatorCode
+      );
+    }
 
-    if (response.ok) {
-      const result = await response.json();
+    const response = await fetch(
+      `${API_BASE_URL}${endpoint}`,
+      {
+        ...options,
+        headers,
+        credentials: 'include',
+        signal: AbortSignal.timeout(15000)
+      }
+    );
+
+    const result = await response.json().catch(() => ({}));
+
+    if (!response.ok || result.success === false) {
       return {
-        success: result.success !== false,
-        data: result.data || result,
-        message: result.message || 'Success',
-        isLiveBackend: true,
+        success: false,
+        message:
+          result.message ||
+          `Request failed with status ${response.status}`,
+        isLiveBackend: true
       };
     }
-  } catch (error: any) {
-    console.warn('[API Fallback Triggered]: Live server unreachable, switching to robust local session mode.');
+
+    return {
+      success: true,
+      data: (result.data !== undefined ? result.data : result) as T,
+      message: result.message || 'Success',
+      isLiveBackend: true
+    };
+
+  } catch (error) {
+    console.error('[ChatNova API Error]:', error);
+
+    return {
+      success: false,
+      message:
+        'ChatNova server is unavailable. Please try again later.',
+      isLiveBackend: false
+    };
   }
-
-  // --- ROBUST LOCAL FALLBACK HANDLERS (Ensures Zero Identity Errors) ---
-  try {
-    // 1. REGISTER
-    if (endpoint.includes('/auth/register')) {
-      const rawId = body?.customId || '@user';
-      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
-      
-      const newUser = {
-        id: 'user_' + Date.now(),
-        customId: formattedCustomId,
-        displayName: body?.displayName || formattedCustomId.replace('@', '').toUpperCase(),
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: formattedCustomId.includes('admin') ? 'master_admin' : 'user',
-        status: 'online',
-        publicKeyFingerprint: 'E2EE-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-      };
-
-      const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      if (Array.isArray(allUsers) && !allUsers.some((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId)) {
-        allUsers.push(newUser);
-        localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
-      }
-
-      const token = 'jwt_token_' + Date.now();
-      setAuthToken(token);
-      localStorage.setItem('chatnova_current_user', JSON.stringify(newUser));
-
-      return {
-        success: true,
-        data: { token, user: newUser } as unknown as T,
-        message: 'Registered successfully',
-        isLiveBackend: false,
-      };
-    }
-
-    // 2. LOGIN / 2FA VERIFICATION
-    if (endpoint.includes('/auth/login') || endpoint.includes('/auth/verify')) {
-      const rawId = body?.customId || body?.username || '@narendra_56';
-      const formattedCustomId = rawId.startsWith('@') ? rawId.toLowerCase() : `@${rawId.toLowerCase()}`;
-      const allUsers = JSON.parse(localStorage.getItem('chatnova_all_users') || '[]');
-      
-      let foundUser = Array.isArray(allUsers) ? allUsers.find((u: any) => u && u.customId && u.customId.toLowerCase() === formattedCustomId) : null;
-
-      // Auto-create or rescue master admin/any user so login NEVER fails with "Identity not found"
-      if (!foundUser) {
-        foundUser = {
-          id: 'user_' + Date.now(),
-          customId: formattedCustomId,
-          displayName: formattedCustomId.replace('@', '').toUpperCase(),
-          avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-          role: formattedCustomId.includes('admin') || formattedCustomId.includes('narendra') ? 'master_admin' : 'user',
-          status: 'online',
-          publicKeyFingerprint: 'E2EE-' + Math.random().toString(36).substring(2, 8).toUpperCase(),
-        };
-        if (Array.isArray(allUsers)) {
-          allUsers.push(foundUser);
-          localStorage.setItem('chatnova_all_users', JSON.stringify(allUsers));
-        }
-      }
-
-      const token = 'jwt_token_' + Date.now();
-      setAuthToken(token);
-      localStorage.setItem('chatnova_current_user', JSON.stringify(foundUser));
-
-      return {
-        success: true,
-        data: { token, user: foundUser } as unknown as T,
-        message: 'Authenticated successfully',
-        isLiveBackend: false,
-      };
-    }
-
-    // 3. GET ME
-    if (endpoint.includes('/auth/me')) {
-      const currentUserStr = localStorage.getItem('chatnova_current_user');
-      const user = currentUserStr ? JSON.parse(currentUserStr) : {
-        id: 'user_1',
-        customId: '@narendra_56',
-        displayName: 'Narendra Sharma',
-        avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
-        role: 'master_admin',
-      };
-
-      return {
-        success: true,
-        data: { user } as unknown as T,
-        isLiveBackend: false,
-      };
-    }
-  } catch (e) {}
-
-  return {
-    success: false,
-    message: 'Operation failed',
-    isLiveBackend: false,
-  };
 }
 
-// 1. AUTHENTICATION APIS
+// --------------------------------------------------
+// AUTHENTICATION APIS
+// --------------------------------------------------
+
 export const authAPI = {
-  register: async (payload: { customId: string; displayName: string; password: string }) => {
-    return apiFetch<{ token: string; user: any }>('/auth/register', {
+  register: async (payload: {
+    customId: string;
+    displayName: string;
+    password: string;
+    mobileNumber: string;
+  }) => {
+    return apiFetch<{
+      customId: string;
+      otpRequired: boolean;
+    }>('/auth/register', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
     });
   },
 
-  login: async (payload: { customId: string; password: string }) => {
-    return apiFetch<{ token: string; user: any }>('/auth/login', {
+  verifyRegistrationOtp: async (payload: {
+    customId: string;
+    otp: string;
+  }) => {
+    return apiFetch<{
+      token: string;
+      user: any;
+    }>('/auth/verify-registration-otp', {
       method: 'POST',
-      body: JSON.stringify(payload),
+      body: JSON.stringify(payload)
+    });
+  },
+
+  setupAuthenticator: async () => {
+    return apiFetch<{
+      qrCode: string;
+      manualEntryKey: string;
+    }>('/auth/authenticator/setup', {
+      method: 'POST'
+    });
+  },
+
+  verifyAuthenticatorSetup: async (code: string) => {
+    return apiFetch<{
+      recoveryCodes: string[];
+    }>('/auth/authenticator/verify-setup', {
+      method: 'POST',
+      body: JSON.stringify({ code })
+    });
+  },
+
+  login: async (payload: {
+    customId: string;
+    password: string;
+    authenticatorCode?: string;
+    recoveryCode?: string;
+  }) => {
+    return apiFetch<{
+      token: string;
+      user: any;
+    }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  forgotPassword: async (payload: {
+    customId: string;
+    authenticatorCode?: string;
+    recoveryCode?: string;
+    newPassword: string;
+  }) => {
+    return apiFetch<{
+      message: string;
+    }>('/auth/forgot-password', {
+      method: 'POST',
+      body: JSON.stringify(payload)
     });
   },
 
   getMe: async () => {
-    return apiFetch<{ user: any }>('/auth/me', {
-      method: 'GET',
+    return apiFetch<{
+      user: any;
+    }>('/auth/me', {
+      method: 'GET'
     });
-  },
+  }
 };
 
-// 2. MASTER ADMIN APIS
+// --------------------------------------------------
+// MASTER ADMIN APIS
+// --------------------------------------------------
+
 export const adminAPI = {
-  getUsers: async (params?: { search?: string; status?: string; page?: number }) => {
-    return apiFetch<{ users: any[]; total: number; page: number }>('/admin/users', {
-      method: 'GET',
-    });
+  getUsers: async (
+    credentials: AdminCredentials,
+    params?: {
+      search?: string;
+      status?: string;
+      page?: number;
+    }
+  ) => {
+    const query = new URLSearchParams();
+
+    if (params?.search) query.set('search', params.search);
+    if (params?.status) query.set('status', params.status);
+    if (params?.page) query.set('page', String(params.page));
+
+    const suffix = query.toString() ? `?${query.toString()}` : '';
+
+    return apiFetch<{
+      users: any[];
+      total: number;
+      page: number;
+    }>(
+      `/admin/users${suffix}`,
+      { method: 'GET' },
+      credentials
+    );
   },
 
-  toggleBan: async (userId: string, isBanned: boolean, reason?: string) => {
-    return apiFetch<{ user: any }>(`/admin/users/${userId}/ban`, {
-      method: 'PUT',
-      body: JSON.stringify({ isBanned, reason }),
-    });
+  toggleBan: async (
+    credentials: AdminCredentials,
+    userId: string,
+    isBanned: boolean,
+    reason?: string
+  ) => {
+    return apiFetch<{ user: any }>(
+      `/admin/users/${encodeURIComponent(userId)}/ban`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ isBanned, reason })
+      },
+      credentials
+    );
   },
 
-  getStats: async () => {
-    return apiFetch<{ stats: any }>('/admin/stats', {
-      method: 'GET',
-    });
+  getStats: async (credentials: AdminCredentials) => {
+    return apiFetch<{ stats: any }>(
+      '/admin/stats',
+      { method: 'GET' },
+      credentials
+    );
   },
 
-  getAuditLogs: async () => {
-    return apiFetch<{ logs: any[] }>('/admin/audit-logs', {
-      method: 'GET',
-    });
+  getAuditLogs: async (credentials: AdminCredentials) => {
+    return apiFetch<{ logs: any[] }>(
+      '/admin/audit-logs',
+      { method: 'GET' },
+      credentials
+    );
   },
 
-  broadcast: async (message: string) => {
-    return apiFetch<{ message: string }>('/admin/broadcast', {
-      method: 'POST',
-      body: JSON.stringify({ message }),
-    });
-  },
+  broadcast: async (
+    credentials: AdminCredentials,
+    message: string
+  ) => {
+    return apiFetch<{ message: string }>(
+      '/admin/broadcast',
+      {
+        method: 'POST',
+        body: JSON.stringify({ message })
+      },
+      credentials
+    );
+  }
 };
