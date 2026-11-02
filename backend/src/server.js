@@ -12,11 +12,8 @@ const { Server } = require('socket.io');
 const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const conversationRoutes = require('./routes/conversationRoutes');
 const initSocket = require('./socket/socketHandler');
-
-// --------------------------------------------------
-// APPLICATION INITIALIZATION
-// --------------------------------------------------
 
 const app = express();
 const server = http.createServer(app);
@@ -24,28 +21,18 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// --------------------------------------------------
-// DATABASE CONNECTION
-// --------------------------------------------------
-
+// Database
 connectDB();
 
-// --------------------------------------------------
-// SECURITY MIDDLEWARES
-// --------------------------------------------------
-
+// Security
 app.disable('x-powered-by');
-
 app.use(helmet());
 
 app.use(
   morgan(NODE_ENV === 'production' ? 'combined' : 'dev')
 );
 
-// --------------------------------------------------
-// CORS CONFIGURATION
-// --------------------------------------------------
-
+// CORS
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 
 const allowedOrigins =
@@ -61,10 +48,7 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
-// --------------------------------------------------
-// REQUEST BODY LIMITS
-// --------------------------------------------------
-
+// Request limits
 app.use(express.json({ limit: '25mb' }));
 
 app.use(
@@ -74,10 +58,7 @@ app.use(
   })
 );
 
-// --------------------------------------------------
-// GLOBAL API RATE LIMIT
-// --------------------------------------------------
-
+// Global API rate limit
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -91,10 +72,7 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// --------------------------------------------------
-// AUTHENTICATION RATE LIMIT
-// --------------------------------------------------
-
+// Authentication rate limit
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -108,10 +86,7 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth', authLimiter);
 
-// --------------------------------------------------
-// SOCKET.IO CONFIGURATION
-// --------------------------------------------------
-
+// Socket.IO
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -124,13 +99,9 @@ const io = new Server(server, {
 });
 
 app.set('io', io);
-
 initSocket(io);
 
-// --------------------------------------------------
-// HEALTH CHECK
-// --------------------------------------------------
-
+// Health check
 app.get('/health', (req, res) => {
   return res.status(200).json({
     success: true,
@@ -141,17 +112,12 @@ app.get('/health', (req, res) => {
   });
 });
 
-// --------------------------------------------------
-// API ROUTES
-// --------------------------------------------------
-
+// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/conversations', conversationRoutes);
 
-// --------------------------------------------------
-// 404 HANDLER
-// --------------------------------------------------
-
+// 404 handler
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
@@ -159,10 +125,7 @@ app.use((req, res) => {
   });
 });
 
-// --------------------------------------------------
-// GLOBAL ERROR HANDLER
-// --------------------------------------------------
-
+// Global error handler
 app.use((err, req, res, next) => {
   const errorMsg =
     err instanceof Error ? err.message : String(err);
@@ -180,10 +143,7 @@ app.use((err, req, res, next) => {
   });
 });
 
-// --------------------------------------------------
-// START SERVER
-// --------------------------------------------------
-
+// Start server
 server.listen(PORT, () => {
   console.log('==========================================');
   console.log('       ChatNova Backend Started');
@@ -191,15 +151,13 @@ server.listen(PORT, () => {
   console.log(`Port: ${PORT}`);
   console.log(`Environment: ${NODE_ENV}`);
   console.log('REST API: Active');
+  console.log('Conversation API: Active');
   console.log('Socket.IO: Active');
   console.log('Master Admin secrets are not logged.');
   console.log('==========================================');
 });
 
-// --------------------------------------------------
-// GRACEFUL SHUTDOWN
-// --------------------------------------------------
-
+// Graceful shutdown
 const gracefulShutdown = () => {
   console.log('[ChatNova] Shutting down gracefully...');
 
