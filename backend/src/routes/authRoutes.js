@@ -21,6 +21,11 @@ const {
   deleteProfileImage
 } = require('../controllers/profileImageController');
 
+const {
+  getPrivacySettings,
+  updatePrivacySettings
+} = require('../controllers/privacyController');
+
 const { protect } = require('../middleware/protect');
 
 router.post('/register', register);
@@ -33,6 +38,9 @@ router.post('/authenticator/verify-setup', protect, verifyAuthenticatorSetup);
 
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
+
+router.get('/privacy', protect, getPrivacySettings);
+router.put('/privacy', protect, updatePrivacySettings);
 
 router.get('/profile-image/:userId', getProfileImage);
 router.post('/profile-image', protect, uploadProfileImage);
