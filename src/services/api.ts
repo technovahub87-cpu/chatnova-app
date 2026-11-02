@@ -235,6 +235,19 @@ export const authAPI = {
     }>('/auth/me', {
       method: 'GET'
     });
+  },
+
+  // Update logged-in user's display name and About.
+  updateProfile: async (payload: {
+    displayName?: string;
+    bio?: string;
+  }) => {
+    return apiFetch<{
+      user: any;
+    }>('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(payload)
+    });
   }
 };
 
