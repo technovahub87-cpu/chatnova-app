@@ -18,7 +18,6 @@ const getMessages = async (req, res) => {
       });
     }
 
-    // Only active members can read this conversation.
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: req.user._id,
@@ -95,7 +94,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // This endpoint currently accepts text messages only.
     const type = req.body.type || 'text';
 
     if (type !== 'text') {
@@ -105,7 +103,6 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    // Verify active conversation membership before saving.
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: req.user._id,
@@ -161,7 +158,6 @@ const sendMessage = async (req, res) => {
       'customId displayName avatar'
     );
 
-    // Notify connected members of the conversation.
     const io = req.app.get('io');
 
     if (io) {
@@ -191,7 +187,107 @@ const sendMessage = async (req, res) => {
   }
 };
 
+// Mark messages received by the logged-in user as read.
+const markMessagesRead = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
+
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid conversation ID.'
+      });
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      participants: req.user._id,
+      isActive: true,
+      type: 'direct'
+    }).select('_id');
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Direct conversation not found or access denied.'
+      });
+    }
+
+    const filter = {
+      chatId: String(conversation._id),
+      recipient: req.user._id,
+      status: { $ne: 'read' }
+    };
+
+    const unreadMessages = await Message.find(filter)
+      .select('_id sender')
+      .lean();
+
+    if (unreadMessages.length === 0) {
+      return res.status(200).json({
+        success: true,
+        message: 'No unread messages.',
+        readMessageIds: []
+      });
+    }
+
+    const readAt = new Date();
+
+    await Message.updateMany(
+      filter,
+      {
+        $set: {
+          status: 'read',
+          readAt
+        }
+      }
+    );
+
+    const readMessageIds = unreadMessages.map(
+      (message) => String(message._id)
+    );
+
+    const io = req.app.get('io');
+
+    if (io) {
+      const senderIds = [
+        ...new Set(
+          unreadMessages.map((message) => String(message.sender))
+        )
+      ];
+
+      senderIds.forEach((senderId) => {
+        io.to(`user:${senderId}`).emit(
+          'chat:message_status',
+          {
+            conversationId: String(conversation._id),
+            messageIds: readMessageIds,
+            status: 'read',
+            readAt
+          }
+        );
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      message: 'Messages marked as read.',
+      readMessageIds,
+      readAt
+    });
+
+  } catch (error) {
+    console.error('[Mark Messages Read]:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to mark messages as read.'
+    });
+  }
+};
+
 module.exports = {
   getMessages,
-  sendMessage
+  sendMessage,
+  markMessagesRead
 };
