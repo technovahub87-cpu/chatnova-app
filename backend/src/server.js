@@ -13,6 +13,7 @@ const connectDB = require('./config/db');
 const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
+const messageRoutes = require('./routes/messageRoutes');
 const initSocket = require('./socket/socketHandler');
 
 const app = express();
@@ -21,10 +22,8 @@ const server = http.createServer(app);
 const PORT = process.env.PORT || 5000;
 const NODE_ENV = process.env.NODE_ENV || 'development';
 
-// Database
 connectDB();
 
-// Security
 app.disable('x-powered-by');
 app.use(helmet());
 
@@ -32,7 +31,6 @@ app.use(
   morgan(NODE_ENV === 'production' ? 'combined' : 'dev')
 );
 
-// CORS
 const corsOrigin = process.env.CORS_ORIGIN || '*';
 
 const allowedOrigins =
@@ -40,25 +38,19 @@ const allowedOrigins =
     ? true
     : corsOrigin.split(',').map((origin) => origin.trim());
 
-const corsOptions = {
+app.use(cors({
   origin: allowedOrigins,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true
-};
+}));
 
-app.use(cors(corsOptions));
-
-// Request limits
 app.use(express.json({ limit: '25mb' }));
 
-app.use(
-  express.urlencoded({
-    extended: true,
-    limit: '25mb'
-  })
-);
+app.use(express.urlencoded({
+  extended: true,
+  limit: '25mb'
+}));
 
-// Global API rate limit
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 300,
@@ -72,7 +64,6 @@ const apiLimiter = rateLimit({
 
 app.use('/api/', apiLimiter);
 
-// Authentication rate limit
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 30,
@@ -86,7 +77,6 @@ const authLimiter = rateLimit({
 
 app.use('/api/auth', authLimiter);
 
-// Socket.IO
 const io = new Server(server, {
   cors: {
     origin: allowedOrigins,
@@ -101,7 +91,6 @@ const io = new Server(server, {
 app.set('io', io);
 initSocket(io);
 
-// Health check
 app.get('/health', (req, res) => {
   return res.status(200).json({
     success: true,
@@ -112,12 +101,11 @@ app.get('/health', (req, res) => {
   });
 });
 
-// API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/conversations', conversationRoutes);
+app.use('/api/messages', messageRoutes);
 
-// 404 handler
 app.use((req, res) => {
   return res.status(404).json({
     success: false,
@@ -125,7 +113,6 @@ app.use((req, res) => {
   });
 });
 
-// Global error handler
 app.use((err, req, res, next) => {
   const errorMsg =
     err instanceof Error ? err.message : String(err);
@@ -143,7 +130,6 @@ app.use((err, req, res, next) => {
   });
 });
 
-// Start server
 server.listen(PORT, () => {
   console.log('==========================================');
   console.log('       ChatNova Backend Started');
@@ -152,12 +138,11 @@ server.listen(PORT, () => {
   console.log(`Environment: ${NODE_ENV}`);
   console.log('REST API: Active');
   console.log('Conversation API: Active');
+  console.log('Message API: Active');
   console.log('Socket.IO: Active');
-  console.log('Master Admin secrets are not logged.');
   console.log('==========================================');
 });
 
-// Graceful shutdown
 const gracefulShutdown = () => {
   console.log('[ChatNova] Shutting down gracefully...');
 
