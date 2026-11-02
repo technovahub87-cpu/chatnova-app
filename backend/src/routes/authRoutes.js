@@ -32,25 +32,48 @@ const {
   revokeSession
 } = require('../controllers/sessionController');
 
+const {
+  createDevicePairing,
+  claimDevicePairing,
+  getDevicePairingStatus,
+  approveDevicePairing,
+  rejectDevicePairing,
+  completeDevicePairing
+} = require('../controllers/devicePairingController');
+
 const { protect } = require('../middleware/protect');
 
+// Registration and login
 router.post('/register', register);
 router.post('/verify-registration-otp', verifyRegistrationOtp);
 router.post('/login', login);
 router.post('/forgot-password', forgotPassword);
 
+// Authenticator
 router.post('/authenticator/setup', protect, setupAuthenticator);
 router.post('/authenticator/verify-setup', protect, verifyAuthenticatorSetup);
 
+// User profile
 router.get('/me', protect, getMe);
 router.put('/profile', protect, updateProfile);
 
+// Privacy settings
 router.get('/privacy', protect, getPrivacySettings);
 router.put('/privacy', protect, updatePrivacySettings);
 
+// Linked devices and sessions
 router.get('/sessions', protect, getMySessions);
 router.delete('/sessions/:sessionId', protect, revokeSession);
 
+// QR device pairing
+router.post('/device-pairing/create', protect, createDevicePairing);
+router.post('/device-pairing/claim', claimDevicePairing);
+router.get('/device-pairing/:pairingId/status', protect, getDevicePairingStatus);
+router.post('/device-pairing/:pairingId/approve', protect, approveDevicePairing);
+router.post('/device-pairing/:pairingId/reject', protect, rejectDevicePairing);
+router.post('/device-pairing/complete', completeDevicePairing);
+
+// Profile photo
 router.get('/profile-image/:userId', getProfileImage);
 router.post('/profile-image', protect, uploadProfileImage);
 router.delete('/profile-image', protect, deleteProfileImage);
