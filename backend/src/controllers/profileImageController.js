@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const ProfileImage = require('../models/ProfileImage');
 const User = require('../models/User');
@@ -121,7 +122,6 @@ exports.getProfileImage = async (req, res) => {
       return res.status(400).end();
     }
 
-    // Use a Mongoose document so the image data is returned as a Buffer.
     const image = await ProfileImage.findOne({ user: userId });
 
     if (!image || !image.data) {
@@ -136,7 +136,8 @@ exports.getProfileImage = async (req, res) => {
       'Content-Type': image.contentType,
       'Content-Length': String(imageBuffer.length),
       'Cache-Control': 'no-store',
-      'X-Content-Type-Options': 'nosniff'
+      'X-Content-Type-Options': 'nosniff',
+      'Cross-Origin-Resource-Policy': 'cross-origin'
     });
 
     return res.status(200).send(imageBuffer);
