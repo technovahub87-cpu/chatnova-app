@@ -12,7 +12,8 @@ import {
   Camera,
   Trash2,
   ShieldCheck,
-  Smartphone
+  Smartphone,
+  Bell
 } from 'lucide-react';
 
 import { User as ChatNovaUser } from '../types';
@@ -21,6 +22,7 @@ import { profileImageAPI } from '../services/profileImageAPI';
 import { useTheme } from '../context/ThemeContext';
 import PrivacySettings from './PrivacySettings';
 import LinkedDevicesSettings from './LinkedDevicesSettings';
+import NotificationsSettings from './NotificationsSettings';
 
 interface ProfileSettingsProps {
   currentUser: ChatNovaUser;
@@ -37,6 +39,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLinkedDevices, setShowLinkedDevices] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   const [displayName, setDisplayName] = useState(
     currentUser.displayName || ''
@@ -258,6 +261,30 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </header>
 
           <form onSubmit={handleSave} className="p-5 space-y-5">
+
+            <button
+              type="button"
+              onClick={() => setShowNotifications(true)}
+              className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
+                isDark
+                  ? 'border-slate-700 bg-[#202c33]'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <Bell className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Notifications</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Messages, Groups, Calls, Sound and Vibration
+                </p>
+              </div>
+              <span className="text-emerald-500 text-sm font-semibold">
+                Open
+              </span>
+            </button>
+
             <button
               type="button"
               onClick={() => setShowPrivacy(true)}
@@ -497,6 +524,12 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       {showLinkedDevices && (
         <LinkedDevicesSettings
           onClose={() => setShowLinkedDevices(false)}
+        />
+      )}
+
+      {showNotifications && (
+        <NotificationsSettings
+          onClose={() => setShowNotifications(false)}
         />
       )}
     </>
