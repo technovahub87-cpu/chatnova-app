@@ -1,184 +1,759 @@
+
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
+const speakeasy = require('speakeasy');
+const QRCode = require('qrcode');
 const User = require('../models/User');
 
-// Helper to generate JWT Token
+// --------------------------------------------------
+// BASIC HELPERS
+// --------------------------------------------------
+
 const generateToken = (id) => {
+  if (!process.env.JWT_SECRET) {
+    throw new Error('JWT_SECRET is not configured.');
+  }
+
   return jwt.sign(
     { id },
-    process.env.JWT_SECRET || 'chatnova_super_secret_jwt_key_2026_post_quantum',
+    process.env.JWT_SECRET,
     { expiresIn: '30d' }
   );
 };
 
-// Helper to generate Curve25519 style fingerprint
-const generateFingerprint = () => {
-  try {
-    const parts = [];
-    for (let i = 0; i < 6; i++) {
-      parts.push(Math.floor(1000 + Math.random() * 9000).toString());
-    }
-    return parts.join(' ');
-  } catch (e) {
-    return '1234 5678 9012 3456 7890 1234';
+const normalizeCustomId = (value) => {
+  let customId = String(value || '').trim().toLowerCase();
+
+  if (!customId.startsWith('@')) {
+    customId = `@${customId}`;
   }
+
+  if (!/^@[a-z0-9_]{3,24}$/.test(customId)) {
+    throw new Error('ChatNova ID must start with @ and contain 3-24 valid characters.');
+  }
+
+  return customId;
 };
 
-// @desc    Register new Custom ID identity
-// @route   POST /api/auth/register
-// @access  Public
+const generateFingerprint = () => {
+  const parts = [];
+
+  for (let i = 0; i < 6; i++) {
+    parts.push(crypto.randomInt(1000, 10000).toString());
+  }
+
+  return parts.join(' ');
+};
+
+const safeUser = (user) => ({
+  id: user._id,
+  customId: user.customId,
+  displayName: user.displayName,
+  avatar: user.avatar,
+  bio: user.bio,
+  status: user.status,
+  lastSeen: user.lastSeen,
+  publicKeyFingerprint: user.publicKeyFingerprint,
+  role: user.role,
+  twoFactorEnabled: user.twoFactorEnabled,
+  authenticatorEnabled: user.authenticatorEnabled,
+  mobileVerified: user.mobileVerified
+});
+
+const normalizeMobileNumber = (value) => {
+  let mobile = String(value || '').replace(/\D/g, '');
+
+  if (mobile.length === 10) {
+    mobile = `91${mobile}`;
+  }
+
+  if (mobile.length < 10 || mobile.length > 15) {
+    throw new Error('Please provide a valid mobile number with country code.');
+  }
+
+  return mobile;
+};
+
+// --------------------------------------------------
+// AUTHENTICATOR SECRET ENCRYPTION
+// AUTH_ENCRYPTION_KEY must be 64 hexadecimal chars.
+// --------------------------------------------------
+
+const getEncryptionKey = () => {
+  const key = process.env.AUTH_ENCRYPTION_KEY;
+
+  if (!key || !/^[a-fA-F0-9]{64}$/.test(key)) {
+    throw new Error(
+      'AUTH_ENCRYPTION_KEY must be a 64-character hexadecimal key.'
+    );
+  }
+
+  return Buffer.from(key, 'hex');
+};
+
+const encryptSecret = (secret) => {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv(
+    'aes-256-gcm',
+    getEncryptionKey(),
+    iv
+  );
+
+  const encrypted = Buffer.concat([
+    cipher.update(secret, 'utf8'),
+    cipher.final()
+  ]);
+
+  const authTag = cipher.getAuthTag();
+
+  return [
+    iv.toString('hex'),
+    authTag.toString('hex'),
+    encrypted.toString('hex')
+  ].join(':');
+};
+
+const decryptSecret = (encryptedValue) => {
+  const parts = String(encryptedValue || '').split(':');
+
+  if (parts.length !== 3) {
+    throw new Error('Invalid encrypted authenticator secret.');
+  }
+
+  const [ivHex, tagHex, encryptedHex] = parts;
+
+  const decipher = crypto.createDecipheriv(
+    'aes-256-gcm',
+    getEncryptionKey(),
+    Buffer.from(ivHex, 'hex')
+  );
+
+  decipher.setAuthTag(Buffer.from(tagHex, 'hex'));
+
+  return Buffer.concat([
+    decipher.update(Buffer.from(encryptedHex, 'hex')),
+    decipher.final()
+  ]).toString('utf8');
+};
+
+// --------------------------------------------------
+// OTP AND RECOVERY CODE HELPERS
+// --------------------------------------------------
+
+const hashValue = (value) => {
+  return crypto
+    .createHash('sha256')
+    .update(String(value))
+    .digest('hex');
+};
+
+const safeCompare = (first, second) => {
+  const a = Buffer.from(String(first || ''), 'hex');
+  const b = Buffer.from(String(second || ''), 'hex');
+
+  return a.length === b.length &&
+    a.length > 0 &&
+    crypto.timingSafeEqual(a, b);
+};
+
+const generateRecoveryCodes = () => {
+  return Array.from({ length: 10 }, () =>
+    crypto.randomBytes(5).toString('hex').toUpperCase()
+  );
+};
+
+const verifyAuthenticatorCode = (user, code) => {
+  if (!user.authenticatorSecretEncrypted) {
+    return false;
+  }
+
+  const secret = decryptSecret(user.authenticatorSecretEncrypted);
+
+  return speakeasy.totp.verify({
+    secret,
+    encoding: 'base32',
+    token: String(code || '').replace(/\s/g, ''),
+    window: 1
+  });
+};
+
+const consumeRecoveryCode = (user, code) => {
+  const enteredHash = hashValue(
+    String(code || '').trim().toUpperCase()
+  );
+
+  const codes = user.recoveryCodesHash || [];
+
+  const index = codes.findIndex((savedHash) =>
+    safeCompare(savedHash, enteredHash)
+  );
+
+  if (index === -1) {
+    return false;
+  }
+
+  codes.splice(index, 1);
+  user.recoveryCodesHash = codes;
+
+  return true;
+};
+
+// --------------------------------------------------
+// 2FACTOR SMS SERVICE
+// --------------------------------------------------
+
+const sendRegistrationOtp = async (mobileNumber) => {
+  const apiKey = process.env.TWOFACTOR_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('2Factor SMS API key is not configured.');
+  }
+
+  const url =
+    `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}` +
+    `/SMS/${encodeURIComponent(mobileNumber)}/AUTOGEN`;
+
+  const response = await fetch(url);
+  const result = await response.json();
+
+  if (
+    !response.ok ||
+    result.Status !== 'Success' ||
+    !result.Details
+  ) {
+    throw new Error('Unable to send registration OTP. Please try again.');
+  }
+
+  return result.Details;
+};
+
+const verifyRegistrationOtp = async (sessionId, otp) => {
+  const apiKey = process.env.TWOFACTOR_API_KEY;
+
+  const url =
+    `https://2factor.in/API/V1/${encodeURIComponent(apiKey)}` +
+    `/SMS/VERIFY/${encodeURIComponent(sessionId)}` +
+    `/${encodeURIComponent(String(otp).trim())}`;
+
+  const response = await fetch(url);
+  const result = await response.json();
+
+  return response.ok && result.Status === 'Success';
+};
+
+// --------------------------------------------------
+// REGISTER NEW ACCOUNT
+// POST /api/auth/register
+// SMS OTP is sent only during registration.
+// --------------------------------------------------
+
 exports.register = async (req, res) => {
   try {
-    let { customId, displayName, password } = req.body;
+    const { customId, displayName, password, mobileNumber } = req.body;
 
-    if (!customId || !password) {
+    if (!customId || !password || !mobileNumber) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide both Custom Username/ID and Password.',
+        message: 'Custom ID, password and mobile number are required.'
       });
     }
 
-    // Ensure format starts with @
-    customId = customId.trim().toLowerCase();
-    if (!customId.startsWith('@')) {
-      customId = `@${customId}`;
-    }
-
-    // Check if custom ID already taken
-    const existingUser = await User.findOne({ customId });
-    if (existingUser) {
+    if (String(password).length < 8) {
       return res.status(400).json({
         success: false,
-        message: `Identity ${customId} is already registered on the network.`,
+        message: 'Password must contain at least 8 characters.'
       });
     }
 
-    // Create user
-    const user = await User.create({
-      customId,
-      displayName: displayName?.trim() || customId.replace('@', ''),
-      password,
-      publicKeyFingerprint: generateFingerprint(),
-      role: 'user',
-      twoFactorEnabled: true,
+    const normalizedId = normalizeCustomId(customId);
+    const mobile = normalizeMobileNumber(mobileNumber);
+
+    let user = await User.findOne({ customId: normalizedId })
+      .select(
+        '+password +registrationOtpHash ' +
+        '+registrationOtpExpiresAt +registrationOtpAttempts ' +
+        '+registrationOtpLastSentAt'
+      );
+
+    if (user && user.mobileVerified) {
+      return res.status(409).json({
+        success: false,
+        message: 'This ChatNova ID is already registered.'
+      });
+    }
+
+    if (
+      user &&
+      user.registrationOtpLastSentAt &&
+      Date.now() - user.registrationOtpLastSentAt.getTime() < 60000
+    ) {
+      return res.status(429).json({
+        success: false,
+        message: 'Please wait 60 seconds before requesting another OTP.'
+      });
+    }
+
+    const existingMobile = await User.findOne({
+      mobileNumber: mobile,
+      mobileVerified: true,
+      ...(user ? { _id: { $ne: user._id } } : {})
     });
 
-    const token = generateToken(user._id);
+    if (existingMobile) {
+      return res.status(409).json({
+        success: false,
+        message: 'This mobile number is already verified on another account.'
+      });
+    }
+
+    // Send SMS OTP through 2Factor.
+    const sessionId = await sendRegistrationOtp(mobile);
+
+    if (!user) {
+      user = new User({
+        customId: normalizedId,
+        displayName: String(displayName || normalizedId.slice(1)).trim(),
+        password,
+        mobileNumber: mobile,
+        publicKeyFingerprint: generateFingerprint(),
+        role: 'user'
+      });
+    } else {
+      user.displayName = String(
+        displayName || normalizedId.slice(1)
+      ).trim();
+      user.password = password;
+      user.mobileNumber = mobile;
+    }
+
+    // Temporary storage of the 2Factor verification session ID.
+    user.registrationOtpHash = sessionId;
+    user.registrationOtpExpiresAt = new Date(Date.now() + 5 * 60 * 1000);
+    user.registrationOtpAttempts = 0;
+    user.registrationOtpLastSentAt = new Date();
+
+    await user.save();
 
     return res.status(201).json({
       success: true,
-      message: 'Cryptographic identity created successfully.',
-      token,
-      user: {
-        id: user._id,
-        customId: user.customId,
-        displayName: user.displayName,
-        avatar: user.avatar,
-        bio: user.bio,
-        status: user.status,
-        lastSeen: user.lastSeen,
-        publicKeyFingerprint: user.publicKeyFingerprint,
-        role: user.role,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      message: 'Registration OTP sent. Verify your mobile number to continue.',
+      customId: user.customId,
+      otpRequired: true
     });
+
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[Auth Register Error]:', errorMsg);
-    return res.status(500).json({
+    console.error('[Register Error]:', error.message);
+
+    return res.status(400).json({
       success: false,
-      message: errorMsg || 'Server error while generating identity.',
+      message: error.message || 'Registration failed.'
     });
   }
 };
 
-// @desc    Login with Custom ID and Password
-// @route   POST /api/auth/login
-// @access  Public
+// --------------------------------------------------
+// VERIFY REGISTRATION SMS OTP
+// POST /api/auth/verify-registration-otp
+// --------------------------------------------------
+
+exports.verifyRegistrationOtp = async (req, res) => {
+  try {
+    const { customId, otp } = req.body;
+
+    if (!customId || !otp) {
+      return res.status(400).json({
+        success: false,
+        message: 'ChatNova ID and OTP are required.'
+      });
+    }
+
+    const normalizedId = normalizeCustomId(customId);
+
+    const user = await User.findOne({ customId: normalizedId })
+      .select(
+        '+registrationOtpHash +registrationOtpExpiresAt ' +
+        '+registrationOtpAttempts'
+      );
+
+    if (!user || !user.registrationOtpHash) {
+      return res.status(400).json({
+        success: false,
+        message: 'No pending registration OTP found.'
+      });
+    }
+
+    if (
+      !user.registrationOtpExpiresAt ||
+      user.registrationOtpExpiresAt < new Date()
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: 'OTP has expired. Please register again.'
+      });
+    }
+
+    if (user.registrationOtpAttempts >= 5) {
+      return res.status(429).json({
+        success: false,
+        message: 'Too many OTP attempts. Please register again.'
+      });
+    }
+
+    user.registrationOtpAttempts += 1;
+    await user.save();
+
+    const verified = await verifyRegistrationOtp(
+      user.registrationOtpHash,
+      otp
+    );
+
+    if (!verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid registration OTP.'
+      });
+    }
+
+    user.mobileVerified = true;
+    user.registrationOtpHash = null;
+    user.registrationOtpExpiresAt = null;
+    user.registrationOtpAttempts = 0;
+
+    await user.save();
+
+    const token = generateToken(user._id);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Mobile verified. Now set up your Authenticator App.',
+      token,
+      user: safeUser(user)
+    });
+
+  } catch (error) {
+    console.error('[Registration OTP Error]:', error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'OTP verification failed.'
+    });
+  }
+};
+
+// --------------------------------------------------
+// SET UP AUTHENTICATOR APP
+// POST /api/auth/authenticator/setup
+// Protected route
+// --------------------------------------------------
+
+exports.setupAuthenticator = async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id)
+      .select('+pendingAuthenticatorSecretEncrypted');
+
+    if (!user || !user.mobileVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Verify your mobile number before setting up authentication.'
+      });
+    }
+
+    if (user.authenticatorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Authenticator App is already enabled.'
+      });
+    }
+
+    const secret = speakeasy.generateSecret({
+      name: `ChatNova (${user.customId})`,
+      issuer: 'ChatNova',
+      length: 20
+    });
+
+    user.pendingAuthenticatorSecretEncrypted = encryptSecret(secret.base32);
+    await user.save();
+
+    const qrCode = await QRCode.toDataURL(secret.otpauth_url);
+
+    return res.status(200).json({
+      success: true,
+      message: 'Scan this QR code with Google Authenticator or another TOTP app.',
+      qrCode,
+      manualEntryKey: secret.base32
+    });
+
+  } catch (error) {
+    console.error('[Authenticator Setup Error]:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to set up Authenticator App.'
+    });
+  }
+};
+
+// --------------------------------------------------
+// VERIFY AUTHENTICATOR SETUP
+// POST /api/auth/authenticator/verify-setup
+// Protected route
+// --------------------------------------------------
+
+exports.verifyAuthenticatorSetup = async (req, res) => {
+  try {
+    const { code } = req.body;
+
+    const user = await User.findById(req.user._id)
+      .select('+pendingAuthenticatorSecretEncrypted +recoveryCodesHash');
+
+    if (!user || !user.pendingAuthenticatorSecretEncrypted) {
+      return res.status(400).json({
+        success: false,
+        message: 'Please start Authenticator App setup first.'
+      });
+    }
+
+    const secret = decryptSecret(user.pendingAuthenticatorSecretEncrypted);
+
+    const verified = speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token: String(code || '').replace(/\s/g, ''),
+      window: 1
+    });
+
+    if (!verified) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid Authenticator code.'
+      });
+    }
+
+    const recoveryCodes = generateRecoveryCodes();
+
+    user.authenticatorSecretEncrypted = user.pendingAuthenticatorSecretEncrypted;
+    user.pendingAuthenticatorSecretEncrypted = null;
+    user.authenticatorEnabled = true;
+    user.twoFactorEnabled = true;
+    user.recoveryCodesHash = recoveryCodes.map(hashValue);
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Authenticator App enabled successfully.',
+      recoveryCodes,
+      warning: 'Save these recovery codes safely. Each code can be used only once.'
+    });
+
+  } catch (error) {
+    console.error('[Authenticator Verify Error]:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to verify Authenticator setup.'
+    });
+  }
+};
+
+// --------------------------------------------------
+// LOGIN WITH CUSTOM ID + PASSWORD + AUTHENTICATOR
+// POST /api/auth/login
+// --------------------------------------------------
+
 exports.login = async (req, res) => {
   try {
-    let { customId, password } = req.body;
+    const { customId, password, authenticatorCode, recoveryCode } = req.body;
 
     if (!customId || !password) {
       return res.status(400).json({
         success: false,
-        message: 'Please provide Custom Username/ID and Password.',
+        message: 'Custom ID and password are required.'
       });
     }
 
-    customId = customId.trim().toLowerCase();
-    if (!customId.startsWith('@')) {
-      customId = `@${customId}`;
-    }
+    const normalizedId = normalizeCustomId(customId);
 
-    // Find user with password selected
-    const user = await User.findOne({ customId }).select('+password');
+    const user = await User.findOne({ customId: normalizedId })
+      .select(
+        '+password +authenticatorSecretEncrypted +recoveryCodesHash'
+      );
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Identity not found. Please verify your Custom ID.',
+        message: 'Invalid ChatNova ID or password.'
       });
     }
 
-    // Check if banned
     if (user.isBanned) {
       return res.status(403).json({
         success: false,
-        message: 'This identity has been suspended by Master Administration.',
-        banReason: user.banReason || 'Administrative suspension',
+        message: 'This account has been suspended by Master Administration.',
+        banReason: user.banReason || 'Administrative suspension'
       });
     }
 
-    // Check password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
+    if (!user.mobileVerified) {
+      return res.status(403).json({
+        success: false,
+        message: 'Mobile verification is incomplete.'
+      });
+    }
+
+    const passwordMatches = await user.comparePassword(password);
+
+    if (!passwordMatches) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid passphrase credentials.',
+        message: 'Invalid ChatNova ID or password.'
       });
     }
 
-    // Generate token
+    if (!user.authenticatorEnabled || !user.authenticatorSecretEncrypted) {
+      return res.status(403).json({
+        success: false,
+        message: 'Authenticator App setup is required before login.'
+      });
+    }
+
+    let secondFactorVerified = false;
+
+    if (authenticatorCode) {
+      secondFactorVerified = verifyAuthenticatorCode(
+        user,
+        authenticatorCode
+      );
+    } else if (recoveryCode) {
+      secondFactorVerified = consumeRecoveryCode(user, recoveryCode);
+
+      if (secondFactorVerified) {
+        await user.save();
+      }
+    }
+
+    if (!secondFactorVerified) {
+      return res.status(401).json({
+        success: false,
+        message: 'Valid Authenticator code or unused recovery code is required.'
+      });
+    }
+
     const token = generateToken(user._id);
 
     return res.status(200).json({
       success: true,
-      message: 'Decryption session authenticated successfully.',
+      message: 'ChatNova login successful.',
       token,
-      user: {
-        id: user._id,
-        customId: user.customId,
-        displayName: user.displayName,
-        avatar: user.avatar,
-        bio: user.bio,
-        status: user.status,
-        lastSeen: user.lastSeen,
-        publicKeyFingerprint: user.publicKeyFingerprint,
-        role: user.role,
-        twoFactorEnabled: user.twoFactorEnabled,
-      },
+      user: safeUser(user)
     });
+
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[Auth Login Error]:', errorMsg);
-    return res.status(500).json({
+    console.error('[Login Error]:', error.message);
+
+    return res.status(400).json({
       success: false,
-      message: 'Server error during authentication.',
+      message: error.message || 'Login failed.'
     });
   }
 };
 
-// @desc    Get current user profile
-// @route   GET /api/auth/me
-// @access  Private
+// --------------------------------------------------
+// FORGOT PASSWORD USING AUTHENTICATOR OR RECOVERY CODE
+// POST /api/auth/forgot-password
+// --------------------------------------------------
+
+exports.forgotPassword = async (req, res) => {
+  try {
+    const {
+      customId,
+      authenticatorCode,
+      recoveryCode,
+      newPassword
+    } = req.body;
+
+    if (!customId || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        message: 'ChatNova ID and new password are required.'
+      });
+    }
+
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({
+        success: false,
+        message: 'New password must contain at least 8 characters.'
+      });
+    }
+
+    const normalizedId = normalizeCustomId(customId);
+
+    const user = await User.findOne({ customId: normalizedId })
+      .select(
+        '+password +authenticatorSecretEncrypted +recoveryCodesHash'
+      );
+
+    if (!user || !user.mobileVerified || !user.authenticatorEnabled) {
+      return res.status(400).json({
+        success: false,
+        message: 'Account or Authenticator setup could not be verified.'
+      });
+    }
+
+    let verified = false;
+
+    if (authenticatorCode) {
+      verified = verifyAuthenticatorCode(user, authenticatorCode);
+    } else if (recoveryCode) {
+      verified = consumeRecoveryCode(user, recoveryCode);
+    }
+
+    if (!verified) {
+      return res.status(401).json({
+        success: false,
+        message: 'Valid Authenticator code or unused recovery code is required.'
+      });
+    }
+
+    user.password = newPassword;
+
+    // Invalidate any old sessions at the data level.
+    user.tokenVersion = (user.tokenVersion || 0) + 1;
+
+    await user.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'Password changed successfully. Please log in again.'
+    });
+
+  } catch (error) {
+    console.error('[Forgot Password Error]:', error.message);
+
+    return res.status(400).json({
+      success: false,
+      message: error.message || 'Password reset failed.'
+    });
+  }
+};
+
+// --------------------------------------------------
+// GET CURRENT USER PROFILE
+// GET /api/auth/me
+// --------------------------------------------------
+
 exports.getMe = async (req, res) => {
   try {
     return res.status(200).json({
       success: true,
-      user: req.user,
+      user: req.user
     });
   } catch (error) {
-    return res.status(500).json({ success: false, message: 'Server error retrieving profile.' });
+    console.error('[Get Me Error]:', error.message);
+
+    return res.status(500).json({
+      success: false,
+      message: 'Server error retrieving profile.'
+    });
   }
 };
