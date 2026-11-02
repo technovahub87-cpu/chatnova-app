@@ -11,7 +11,6 @@ const ConversationSchema = new mongoose.Schema(
       index: true
     },
 
-    // Only verified database User IDs are stored here.
     participants: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -20,13 +19,8 @@ const ConversationSchema = new mongoose.Schema(
       }
     ],
 
-    // Unique deterministic key for one-to-one conversations.
-    // Example: smallerUserId_largerUserId
     directKey: {
       type: String,
-      default: null,
-      unique: true,
-      sparse: true,
       trim: true
     },
 
@@ -56,7 +50,6 @@ const ConversationSchema = new mongoose.Schema(
       default: ''
     },
 
-    // Only these members can manage group settings.
     admins: [
       {
         type: mongoose.Schema.Types.ObjectId,
@@ -87,7 +80,6 @@ const ConversationSchema = new mongoose.Schema(
   }
 );
 
-// Every conversation must have at least two members.
 ConversationSchema.pre('validate', function (next) {
   if (!Array.isArray(this.participants) || this.participants.length < 2) {
     return next(new Error('A conversation requires at least two participants.'));
@@ -112,16 +104,32 @@ ConversationSchema.pre('validate', function (next) {
     return next(new Error('A group name is required.'));
   }
 
+  if (this.type === 'direct' && !this.directKey) {
+    return next(new Error('A direct conversation requires a direct key.'));
+  }
+
+  if (this.type === 'group' && this.directKey) {
+    return next(new Error('A group conversation cannot have a direct key.'));
+  }
+
   next();
 });
 
-// Efficiently find conversations belonging to a user.
+ConversationSchema.index(
+  { directKey: 1 },
+  {
+    unique: true,
+    partialFilterExpression: {
+      directKey: { $type: 'string' }
+    }
+  }
+);
+
 ConversationSchema.index({
   participants: 1,
   lastActivityAt: -1
 });
 
-// Efficiently check membership and load recent conversations.
 ConversationSchema.index({
   _id: 1,
   participants: 1,
