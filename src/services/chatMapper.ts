@@ -5,8 +5,27 @@ import {
   User
 } from '../types';
 
+import { API_BASE_URL } from './api';
+
 const DEFAULT_AVATAR =
   'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80';
+
+export const resolveAvatarUrl = (avatar?: string): string => {
+  if (!avatar) return DEFAULT_AVATAR;
+
+  if (
+    avatar.startsWith('https://') ||
+    avatar.startsWith('http://') ||
+    avatar.startsWith('data:')
+  ) {
+    return avatar;
+  }
+
+  const backendOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
+  const path = avatar.startsWith('/') ? avatar : `/${avatar}`;
+
+  return `${backendOrigin}${path}`;
+};
 
 const getId = (value: any): string => {
   if (!value) return '';
@@ -19,7 +38,7 @@ export const mapBackendUser = (raw: any): User => {
     id: getId(raw),
     customId: raw?.customId || '@user',
     displayName: raw?.displayName || raw?.name || 'ChatNova User',
-    avatar: raw?.avatar || DEFAULT_AVATAR,
+    avatar: resolveAvatarUrl(raw?.avatar),
     bio: raw?.bio || '',
     status: raw?.status || 'offline',
     lastSeen: raw?.lastSeen || 'Recently',
@@ -40,7 +59,6 @@ export const mapBackendMessage = (
   currentUserId: string
 ): Message => {
   const senderId = getId(raw?.sender);
-
   const rawType = raw?.type || 'text';
 
   const messageType =
