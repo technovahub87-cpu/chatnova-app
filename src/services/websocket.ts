@@ -34,9 +34,7 @@ class WebSocketService {
     const BACKEND_URL = 'https://chatnova-app-n20j.onrender.com';
 
     this.socket = io(BACKEND_URL, {
-      auth: {
-        token
-      },
+      auth: { token },
       transports: ['websocket', 'polling'],
       withCredentials: true,
       reconnection: true,
@@ -46,17 +44,11 @@ class WebSocketService {
     });
 
     this.socket.on('connect', () => {
-      console.log(
-        '[ChatNova WS] Connected:',
-        this.socket?.id
-      );
+      console.log('[ChatNova WS] Connected:', this.socket?.id);
     });
 
     this.socket.on('connect_error', (error) => {
-      console.error(
-        '[ChatNova WS] Connection rejected:',
-        error.message
-      );
+      console.error('[ChatNova WS] Connection rejected:', error.message);
     });
 
     this.socket.on('disconnect', (reason) => {
@@ -71,10 +63,7 @@ class WebSocketService {
           try {
             callback(...args);
           } catch (error) {
-            console.error(
-              `[ChatNova WS] Listener error (${event}):`,
-              error
-            );
+            console.error(`[ChatNova WS] Listener error (${event}):`, error);
           }
         });
       }
@@ -102,15 +91,37 @@ class WebSocketService {
     };
   }
 
-  emit(event: string, data: any): void {
+  emit(event: string, data?: any): void {
     if (!this.socket || !this.socket.connected) {
-      console.warn(
-        `[ChatNova WS] Message not sent. Socket is not connected: ${event}`
-      );
+      console.warn(`[ChatNova WS] Socket is not connected: ${event}`);
       return;
     }
 
     this.socket.emit(event, data);
+  }
+
+  // Join a conversation using its real MongoDB ID.
+  joinConversation(conversationId: string): void {
+    if (!conversationId) return;
+
+    this.emit('chat:join', { conversationId });
+  }
+
+  // Leave a conversation.
+  leaveConversation(conversationId: string): void {
+    if (!conversationId) return;
+
+    this.emit('chat:leave', { conversationId });
+  }
+
+  // Send typing state for a conversation.
+  sendTyping(conversationId: string, isTyping: boolean): void {
+    if (!conversationId) return;
+
+    this.emit('chat:typing', {
+      conversationId,
+      isTyping
+    });
   }
 
   send(event: string, data: any): void {
