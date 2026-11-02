@@ -6,7 +6,7 @@ module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('User connected with socket ID:', socket.id);
 
-    // Helper to map both userId and customId to this socket
+    // Helper to map both userId, customId, and socket.id
     const registerUserMapping = (authData) => {
       if (!authData) return;
       const { userId, customId } = authData;
@@ -47,13 +47,14 @@ module.exports = (io) => {
         const senderId = data.senderId;
         const recipientId = data.recipientId;
         const senderCustomId = data.senderCustomId;
+        const recipientCustomId = data.recipientCustomId;
 
         // 1. Save message to MongoDB permanently
         const newMessage = new Message({
           chatId: chatId,
           senderId: senderId,
           senderName: data.senderName || 'User',
-          recipientId: recipientId,
+          recipientId: recipientId || recipientCustomId,
           content: data.content,
           type: data.type || 'text',
           media: data.media || null,
@@ -85,20 +86,34 @@ module.exports = (io) => {
           console.log(`[Socket Broadcast] Emitted to chat room: ${chatId}`);
         }
 
-        // 3. Fallback direct delivery to recipient if online via ID or Custom ID
-        if (recipientId) {
-          const cleanRecipient = String(recipientId).trim();
-          const recipientSocketId = 
-            onlineUsers.get(cleanRecipient) || 
-            onlineUsers.get(cleanRecipient.toLowerCase()) ||
-            onlineUsers.get(cleanRecipient.startsWith('@') ? cleanRecipient : `@${cleanRecipient}`);
+        // 3. Fallback direct delivery to recipient via ID, Custom ID or socket rooms
+        const targets = [recipientId, recipientCustomId].filter(Boolean);
+        targets.forEach((target) => {
+          const cleanTarget = String(target).trim();
+          const variants = [
+            cleanTarget,
+            cleanTarget.toLowerCase(),
+            cleanTarget.startsWith('@') ? cleanTarget : `@${cleanTarget}`,
+            cleanTarget.startsWith('@') ? cleanTarget.toLowerCase() : `@${cleanTarget.toLowerCase()}`
+          ];
 
-          if (recipientSocketId) {
-            io.to(recipientSocketId).emit('chat:new_message', payload);
-            console.log(`Delivered directly to recipient socket: ${recipientSocketId}`);
+          let targetSocketId = null;
+          for (const v of variants) {
+            if (onlineUsers.has(v)) {
+              targetSocketId = onlineUsers.get(v);
+              break;
+            }
           }
-          io.to(cleanRecipient).emit('chat:new_message', payload);
-        }
+
+          if (targetSocketId) {
+            io.to(targetSocketId).emit('chat:new_message', payload);
+            console.log(`Delivered directly to recipient socket: ${targetSocketId}`);
+          }
+          // Also broadcast to room matching recipient ID/Custom ID
+          variants.forEach((v) => {
+            io.to(v).emit('chat:new_message', payload);
+          });
+        });
 
         // Send confirmation back to sender socket
         socket.emit('chat:message_sent', payload);
