@@ -1,7 +1,6 @@
 
 /**
  * ChatNova Secure API Client
- * No mock login, no local authentication fallback.
  */
 
 export const API_BASE_URL =
@@ -17,6 +16,35 @@ export interface ApiResponse<T> {
 export interface AdminCredentials {
   secret: string;
   authenticatorCode: string;
+}
+
+export interface ConversationRecord {
+  _id: string;
+  type: 'direct' | 'group';
+  participants: any[];
+  groupName?: string;
+  groupDescription?: string;
+  groupIcon?: string;
+  admins?: string[];
+  lastMessage?: any;
+  lastActivityAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface MessageRecord {
+  _id: string;
+  chatId: string;
+  sender: any;
+  senderCustomId: string;
+  senderName: string;
+  recipient?: string;
+  recipientCustomId?: string;
+  type: string;
+  content: string;
+  status: 'sent' | 'delivered' | 'read';
+  createdAt: string;
+  updatedAt: string;
 }
 
 // --------------------------------------------------
@@ -109,7 +137,6 @@ async function apiFetch<T>(
       message: result.message || 'Success',
       isLiveBackend: true
     };
-
   } catch (error) {
     console.error('[ChatNova API Error]:', error);
 
@@ -212,6 +239,106 @@ export const authAPI = {
 };
 
 // --------------------------------------------------
+// CONVERSATION APIS
+// --------------------------------------------------
+
+export const conversationAPI = {
+  getMyConversations: async () => {
+    return apiFetch<{
+      conversations: ConversationRecord[];
+    }>('/conversations', {
+      method: 'GET'
+    });
+  },
+
+  createDirect: async (customId: string) => {
+    return apiFetch<{
+      conversation: ConversationRecord;
+    }>('/conversations/direct', {
+      method: 'POST',
+      body: JSON.stringify({ customId })
+    });
+  },
+
+  createGroup: async (payload: {
+    groupName: string;
+    customIds: string[];
+    groupDescription?: string;
+  }) => {
+    return apiFetch<{
+      conversation: ConversationRecord;
+    }>('/conversations/group', {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getById: async (conversationId: string) => {
+    return apiFetch<{
+      conversation: ConversationRecord;
+    }>(
+      `/conversations/${encodeURIComponent(conversationId)}`,
+      { method: 'GET' }
+    );
+  }
+};
+
+// --------------------------------------------------
+// MESSAGE APIS
+// --------------------------------------------------
+
+export const messageAPI = {
+  getMessages: async (
+    conversationId: string,
+    options?: {
+      limit?: number;
+      before?: string;
+    }
+  ) => {
+    const query = new URLSearchParams();
+
+    if (options?.limit) {
+      query.set('limit', String(options.limit));
+    }
+
+    if (options?.before) {
+      query.set('before', options.before);
+    }
+
+    const suffix = query.toString()
+      ? `?${query.toString()}`
+      : '';
+
+    return apiFetch<{
+      messages: MessageRecord[];
+      hasMore: boolean;
+      nextBefore: string | null;
+    }>(
+      `/messages/${encodeURIComponent(conversationId)}${suffix}`,
+      { method: 'GET' }
+    );
+  },
+
+  sendTextMessage: async (
+    conversationId: string,
+    content: string
+  ) => {
+    return apiFetch<{
+      message: MessageRecord;
+    }>(
+      `/messages/${encodeURIComponent(conversationId)}`,
+      {
+        method: 'POST',
+        body: JSON.stringify({
+          type: 'text',
+          content
+        })
+      }
+    );
+  }
+};
+
+// --------------------------------------------------
 // MASTER ADMIN APIS
 // --------------------------------------------------
 
@@ -230,7 +357,9 @@ export const adminAPI = {
     if (params?.status) query.set('status', params.status);
     if (params?.page) query.set('page', String(params.page));
 
-    const suffix = query.toString() ? `?${query.toString()}` : '';
+    const suffix = query.toString()
+      ? `?${query.toString()}`
+      : '';
 
     return apiFetch<{
       users: any[];
