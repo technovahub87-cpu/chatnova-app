@@ -1,3 +1,4 @@
+
 require('dotenv').config();
 
 const http = require('http');
@@ -27,7 +28,9 @@ const NODE_ENV = process.env.NODE_ENV || 'development';
 let masterBootstrapRunning = false;
 
 const bootstrapMasterAdmin = async () => {
-  if (masterBootstrapRunning) return;
+  if (masterBootstrapRunning || mongoose.connection.readyState !== 1) {
+    return;
+  }
 
   const configuredId = String(
     process.env.MASTER_ADMIN_CUSTOM_ID || ''
@@ -58,14 +61,10 @@ const bootstrapMasterAdmin = async () => {
     });
 
     if (!targetUser) {
-      console.log(
-        '[ChatNova] Master Admin account is not registered and fully verified yet.'
-      );
       return;
     }
 
     if (targetUser.role === 'master_admin') {
-      console.log('[ChatNova] Configured Master Admin is already active.');
       return;
     }
 
@@ -99,6 +98,14 @@ const bootstrapMasterAdmin = async () => {
 mongoose.connection.on('connected', () => {
   bootstrapMasterAdmin();
 });
+
+// Check periodically so an account registered after deployment
+// can also be promoted after completing authentication setup.
+const masterBootstrapInterval = setInterval(() => {
+  bootstrapMasterAdmin();
+}, 15000);
+
+masterBootstrapInterval.unref();
 
 connectDB();
 
@@ -223,6 +230,8 @@ server.listen(PORT, () => {
 
 const gracefulShutdown = () => {
   console.log('[ChatNova] Shutting down gracefully...');
+
+  clearInterval(masterBootstrapInterval);
 
   server.close(() => {
     console.log('[ChatNova] Server connections closed.');
