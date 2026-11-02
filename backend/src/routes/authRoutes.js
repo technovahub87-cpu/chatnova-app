@@ -12,6 +12,7 @@ const {
   getMe
 } = require('../controllers/authController');
 
+const { updateProfile } = require('../controllers/profileController');
 const { protect } = require('../middleware/protect');
 
 // --------------------------------------------------
@@ -34,16 +35,16 @@ router.post('/forgot-password', forgotPassword);
 // PROTECTED AUTHENTICATOR ROUTES
 // --------------------------------------------------
 
-// Generate Authenticator App QR code.
 router.post('/authenticator/setup', protect, setupAuthenticator);
 
-// Verify Authenticator App and activate 2FA.
 router.post('/authenticator/verify-setup', protect, verifyAuthenticatorSetup);
 
 // --------------------------------------------------
-// PROTECTED USER PROFILE ROUTE
+// PROTECTED USER PROFILE ROUTES
 // --------------------------------------------------
 
 router.get('/me', protect, getMe);
+
+router.put('/profile', protect, updateProfile);
 
 module.exports = router;
