@@ -8,11 +8,14 @@ import {
   RefreshCw,
   ShieldAlert,
   Users,
-  AlertCircle
+  AlertCircle,
+  UserCircle,
+  Settings
 } from 'lucide-react';
 
 import { User, Chat, Message } from '../types';
 import { ChatRoom } from './ChatRoom';
+import { ProfileSettings } from './ProfileSettings';
 import { useBackendChat } from '../hooks/useBackendChat';
 import { createBackendDirectChat } from '../services/chatBackend';
 import { mapBackendConversation } from '../services/chatMapper';
@@ -29,7 +32,8 @@ interface BackendDashboardProps {
 export const BackendDashboard: React.FC<BackendDashboardProps> = ({
   currentUser,
   onLogout,
-  onOpenMasterAdmin
+  onOpenMasterAdmin,
+  onUpdateUser
 }) => {
   const { isDark } = useTheme();
 
@@ -50,6 +54,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
   const [showNewChat, setShowNewChat] = useState(false);
   const [creatingChat, setCreatingChat] = useState(false);
   const [localError, setLocalError] = useState('');
+  const [showProfile, setShowProfile] = useState(false);
 
   const activeChat = chats.find(
     (chat) => chat.id === activeChatId
@@ -200,7 +205,16 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={() => setShowProfile(true)}
+              title="Profile Settings"
+              className="p-2 rounded-full hover:bg-slate-500/20 text-emerald-500"
+            >
+              <UserCircle className="w-5 h-5" />
+            </button>
+
             <ThemeToggle />
 
             {currentUser.role === 'master_admin' && (
@@ -233,6 +247,42 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
             </button>
           </div>
         </header>
+
+        <button
+          type="button"
+          onClick={() => setShowProfile(true)}
+          className={`mx-3 mt-3 p-3 rounded-xl border flex items-center gap-3 text-left transition ${
+            isDark
+              ? 'bg-[#202c33] border-slate-700 hover:bg-slate-700/60'
+              : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+          }`}
+        >
+          {currentUser.avatar ? (
+            <img
+              src={currentUser.avatar}
+              alt="Profile"
+              className="w-11 h-11 rounded-full object-cover"
+            />
+          ) : (
+            <div className="w-11 h-11 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg">
+              {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
+            </div>
+          )}
+
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-semibold truncate">
+              {currentUser.displayName}
+            </p>
+            <p className="text-[10px] text-emerald-500">
+              {currentUser.customId}
+            </p>
+            <p className="text-[10px] text-slate-400 mt-0.5">
+              Open profile settings
+            </p>
+          </div>
+
+          <Settings className="w-4 h-4 text-slate-400" />
+        </button>
 
         <div className="p-3">
           <div
@@ -452,6 +502,16 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           </div>
         )}
       </main>
+
+      {showProfile && (
+        <ProfileSettings
+          currentUser={currentUser}
+          onClose={() => setShowProfile(false)}
+          onUpdateUser={(updatedUser) => {
+            onUpdateUser?.(updatedUser);
+          }}
+        />
+      )}
     </div>
   );
 };
