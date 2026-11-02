@@ -175,12 +175,12 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
 
   return (
     <div
-      className={`fixed inset-0 z-[120] flex items-center justify-center p-3 sm:p-6 ${
+      className={`fixed inset-0 z-[120] flex items-center justify-center box-border w-full min-w-0 p-2 sm:p-6 ${
         isDark ? 'bg-black/70' : 'bg-slate-900/40'
       }`}
     >
       <div
-        className={`w-full max-w-lg max-h-[92dvh] overflow-y-auto rounded-2xl border shadow-2xl ${
+        className={`box-border w-full min-w-0 max-w-lg max-h-[92dvh] overflow-x-hidden overflow-y-auto rounded-2xl border shadow-2xl ${
           isDark
             ? 'bg-[#111b21] border-slate-700 text-white'
             : 'bg-white border-slate-200 text-slate-900'
@@ -196,17 +196,17 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 rounded-full hover:bg-slate-500/20"
+            className="shrink-0 p-2 rounded-full hover:bg-slate-500/20"
             aria-label="Back"
           >
             <ArrowLeft className="w-5 h-5" />
           </button>
 
-          <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+          <div className="w-10 h-10 shrink-0 rounded-xl bg-emerald-500/10 flex items-center justify-center">
             <Bell className="w-5 h-5 text-emerald-500" />
           </div>
 
-          <div>
+          <div className="min-w-0">
             <h2 className="font-bold text-lg">Notifications</h2>
             <p className="text-xs text-slate-400">
               Manage your notification preferences
@@ -214,7 +214,7 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
           </div>
         </header>
 
-        <div className="p-4 sm:p-5 space-y-3">
+        <div className="box-border w-full min-w-0 p-3 sm:p-5 space-y-3">
           {loading ? (
             <div className="flex flex-col items-center justify-center py-14 gap-3">
               <Loader2 className="w-7 h-7 text-emerald-500 animate-spin" />
@@ -224,11 +224,13 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
             </div>
           ) : (
             <>
-              <div className={`rounded-xl border p-3 mb-4 ${
-                isDark
-                  ? 'bg-[#202c33] border-slate-700'
-                  : 'bg-slate-50 border-slate-200'
-              }`}>
+              <div
+                className={`box-border w-full min-w-0 rounded-xl border p-3 mb-4 ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
                 <p className="text-xs text-slate-400">
                   Changes are saved automatically to your ChatNova account.
                 </p>
@@ -241,21 +243,21 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
                 return (
                   <div
                     key={key}
-                    className={`flex items-center gap-3 rounded-xl border p-3 ${
+                    className={`box-border grid w-full min-w-0 grid-cols-[40px_minmax(0,1fr)_48px] items-center gap-2 rounded-xl border p-3 ${
                       isDark
                         ? 'bg-[#202c33] border-slate-700'
                         : 'bg-white border-slate-200'
                     }`}
                   >
-                    <div className="w-10 h-10 shrink-0 rounded-xl bg-emerald-500/10 flex items-center justify-center">
-                      <Icon className="w-5 h-5 text-emerald-500" />
+                    <div className="box-border flex h-10 w-10 min-w-0 items-center justify-center rounded-xl bg-emerald-500/10">
+                      <Icon className="h-5 w-5 text-emerald-500" />
                     </div>
 
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-semibold">
+                    <div className="min-w-0 overflow-hidden">
+                      <p className="break-words text-sm font-semibold">
                         {title}
                       </p>
-                      <p className="text-xs text-slate-400 mt-1">
+                      <p className="mt-1 break-words text-xs text-slate-400">
                         {description}
                       </p>
                     </div>
@@ -267,18 +269,19 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
                       aria-label={title}
                       disabled={!!savingKey}
                       onClick={() => handleToggle(key)}
-                      className={`relative w-12 h-7 shrink-0 rounded-full transition-colors disabled:opacity-60 ${
+                      className={`relative box-border !m-0 !h-7 !w-12 !min-w-12 !max-w-12 shrink-0 justify-self-end overflow-hidden rounded-full !border-0 !p-0 transition-colors disabled:opacity-60 ${
                         enabled ? 'bg-emerald-600' : 'bg-slate-500'
                       }`}
                     >
                       <span
-                        className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-transform ${
+                        className={`pointer-events-none absolute left-0 top-1 h-5 w-5 rounded-full bg-white shadow transition-transform ${
                           enabled ? 'translate-x-6' : 'translate-x-1'
                         }`}
                       />
+
                       {busy && (
-                        <span className="absolute inset-0 flex items-center justify-center">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-white" />
+                        <span className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                          <Loader2 className="h-3.5 w-3.5 animate-spin text-white" />
                         </span>
                       )}
                     </button>
@@ -287,15 +290,15 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
               })}
 
               {successMessage && (
-                <div className="flex items-center gap-2 rounded-xl p-3 bg-emerald-500/10 text-emerald-500 text-sm">
-                  <CheckCircle className="w-4 h-4 shrink-0" />
+                <div className="flex min-w-0 items-center gap-2 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500">
+                  <CheckCircle className="h-4 w-4 shrink-0" />
                   {successMessage}
                 </div>
               )}
 
               {errorMessage && (
-                <div className="flex items-center gap-2 rounded-xl p-3 bg-rose-500/10 text-rose-500 text-sm">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
+                <div className="flex min-w-0 items-center gap-2 rounded-xl bg-rose-500/10 p-3 text-sm text-rose-500">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
                   {errorMessage}
                 </div>
               )}
