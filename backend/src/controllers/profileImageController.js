@@ -5,26 +5,22 @@ const User = require('../models/User');
 const MAX_SIZE = 2 * 1024 * 1024;
 
 const IMAGE_TYPES = {
-  'image/jpeg': {
-    signature: (b) =>
-      b.length >= 3 &&
-      b[0] === 0xff &&
-      b[1] === 0xd8 &&
-      b[2] === 0xff
-  },
-  'image/png': {
-    signature: (b) =>
-      b.length >= 8 &&
-      b.subarray(0, 8).equals(
-        Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
-      )
-  },
-  'image/webp': {
-    signature: (b) =>
-      b.length >= 12 &&
-      b.toString('ascii', 0, 4) === 'RIFF' &&
-      b.toString('ascii', 8, 12) === 'WEBP'
-  }
+  'image/jpeg': (b) =>
+    b.length >= 3 &&
+    b[0] === 0xff &&
+    b[1] === 0xd8 &&
+    b[2] === 0xff,
+
+  'image/png': (b) =>
+    b.length >= 8 &&
+    b.subarray(0, 8).equals(
+      Buffer.from([137, 80, 78, 71, 13, 10, 26, 10])
+    ),
+
+  'image/webp': (b) =>
+    b.length >= 12 &&
+    b.toString('ascii', 0, 4) === 'RIFF' &&
+    b.toString('ascii', 8, 12) === 'WEBP'
 };
 
 exports.uploadProfileImage = async (req, res) => {
@@ -64,7 +60,7 @@ exports.uploadProfileImage = async (req, res) => {
       });
     }
 
-    if (!IMAGE_TYPES[contentType].signature(buffer)) {
+    if (!IMAGE_TYPES[contentType](buffer)) {
       return res.status(400).json({
         success: false,
         message: 'Invalid image file.'
@@ -106,6 +102,7 @@ exports.uploadProfileImage = async (req, res) => {
       message: 'Profile photo updated successfully.',
       avatar: avatarUrl
     });
+
   } catch (error) {
     console.error('[Profile Image Upload]:', error.message);
 
@@ -124,22 +121,26 @@ exports.getProfileImage = async (req, res) => {
       return res.status(400).end();
     }
 
-    const image = await ProfileImage.findOne({
-      user: userId
-    }).lean();
+    // Use a Mongoose document so the image data is returned as a Buffer.
+    const image = await ProfileImage.findOne({ user: userId });
 
-    if (!image) {
+    if (!image || !image.data) {
       return res.status(404).end();
     }
 
+    const imageBuffer = Buffer.isBuffer(image.data)
+      ? image.data
+      : Buffer.from(image.data);
+
     res.set({
       'Content-Type': image.contentType,
-      'Content-Length': String(image.size),
-      'Cache-Control': 'public, max-age=300',
+      'Content-Length': String(imageBuffer.length),
+      'Cache-Control': 'no-store',
       'X-Content-Type-Options': 'nosniff'
     });
 
-    return res.status(200).send(image.data);
+    return res.status(200).send(imageBuffer);
+
   } catch (error) {
     console.error('[Profile Image Read]:', error.message);
     return res.status(500).end();
@@ -157,9 +158,7 @@ exports.deleteProfileImage = async (req, res) => {
       });
     }
 
-    await ProfileImage.deleteOne({
-      user: user._id
-    });
+    await ProfileImage.deleteOne({ user: user._id });
 
     user.avatar = '';
     await user.save();
@@ -168,6 +167,7 @@ exports.deleteProfileImage = async (req, res) => {
       success: true,
       message: 'Profile photo removed successfully.'
     });
+
   } catch (error) {
     console.error('[Profile Image Delete]:', error.message);
 
