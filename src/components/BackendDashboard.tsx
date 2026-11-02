@@ -18,7 +18,10 @@ import { ChatRoom } from './ChatRoom';
 import { ProfileSettings } from './ProfileSettings';
 import { useBackendChat } from '../hooks/useBackendChat';
 import { createBackendDirectChat } from '../services/chatBackend';
-import { mapBackendConversation } from '../services/chatMapper';
+import {
+  mapBackendConversation,
+  resolveAvatarUrl
+} from '../services/chatMapper';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -28,6 +31,45 @@ interface BackendDashboardProps {
   onOpenMasterAdmin: () => void;
   onUpdateUser?: (updatedUser: User) => void;
 }
+
+interface AvatarImageProps {
+  avatar?: string;
+  name?: string;
+  className: string;
+  fallbackClassName: string;
+}
+
+const AvatarImage: React.FC<AvatarImageProps> = ({
+  avatar,
+  name,
+  className,
+  fallbackClassName
+}) => {
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => {
+    setImageFailed(false);
+  }, [avatar]);
+
+  const imageUrl = avatar ? resolveAvatarUrl(avatar) : '';
+
+  if (!imageUrl || imageFailed) {
+    return (
+      <div className={fallbackClassName}>
+        {(name || 'U').trim().charAt(0).toUpperCase()}
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imageUrl}
+      alt={name || 'Profile'}
+      className={className}
+      onError={() => setImageFailed(true)}
+    />
+  );
+};
 
 export const BackendDashboard: React.FC<BackendDashboardProps> = ({
   currentUser,
@@ -210,9 +252,14 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
               type="button"
               onClick={() => setShowProfile(true)}
               title="Profile Settings"
-              className="p-2 rounded-full hover:bg-slate-500/20 text-emerald-500"
+              className="p-1 rounded-full hover:bg-slate-500/20"
             >
-              <UserCircle className="w-5 h-5" />
+              <AvatarImage
+                avatar={currentUser.avatar}
+                name={currentUser.displayName}
+                className="w-8 h-8 rounded-full object-cover"
+                fallbackClassName="w-8 h-8 rounded-full bg-emerald-600 flex items-center justify-center text-white text-sm font-bold"
+              />
             </button>
 
             <ThemeToggle />
@@ -257,17 +304,12 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
               : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
           }`}
         >
-          {currentUser.avatar ? (
-            <img
-              src={currentUser.avatar}
-              alt="Profile"
-              className="w-11 h-11 rounded-full object-cover"
-            />
-          ) : (
-            <div className="w-11 h-11 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg">
-              {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
-            </div>
-          )}
+          <AvatarImage
+            avatar={currentUser.avatar}
+            name={currentUser.displayName}
+            className="w-11 h-11 rounded-full object-cover"
+            fallbackClassName="w-11 h-11 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg"
+          />
 
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold truncate">
@@ -416,10 +458,11 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
                       : ''
                   }`}
                 >
-                  <img
-                    src={avatar || 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150'}
-                    alt=""
+                  <AvatarImage
+                    avatar={avatar}
+                    name={title}
                     className="w-12 h-12 rounded-full object-cover"
+                    fallbackClassName="w-12 h-12 shrink-0 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg"
                   />
 
                   <div className="min-w-0 flex-1">
@@ -450,9 +493,12 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
             isDark ? 'border-slate-800' : 'border-slate-200'
           }`}
         >
-          <div className="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold">
-            {(currentUser.displayName || 'U').charAt(0).toUpperCase()}
-          </div>
+          <AvatarImage
+            avatar={currentUser.avatar}
+            name={currentUser.displayName}
+            className="w-9 h-9 rounded-full object-cover"
+            fallbackClassName="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold"
+          />
 
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold truncate">
