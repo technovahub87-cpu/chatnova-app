@@ -1,7 +1,7 @@
 
 import React, { useEffect, useState } from 'react';
 
-import { Dashboard } from './components/Dashboard';
+import { BackendDashboard } from './components/BackendDashboard';
 import { MasterAdminPanel } from './components/MasterAdminPanel';
 import { AuthScreen } from './components/AuthScreen';
 import { SplashScreen } from './components/SplashScreen';
@@ -22,7 +22,6 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
 
-  // Restore a session only after the backend verifies its JWT.
   useEffect(() => {
     let cancelled = false;
 
@@ -106,7 +105,6 @@ function AppContent() {
     };
   }, []);
 
-  // Splash screen display.
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setShowSplash(false);
@@ -115,7 +113,6 @@ function AppContent() {
     return () => window.clearTimeout(timer);
   }, []);
 
-  // Connect Socket.IO only with the authenticated JWT.
   useEffect(() => {
     if (!currentUser) {
       wsService.disconnect();
@@ -169,7 +166,7 @@ function AppContent() {
   return (
     <>
       {currentUser ? (
-        <Dashboard
+        <BackendDashboard
           currentUser={currentUser}
           onLogout={handleLogout}
           onOpenMasterAdmin={() => setShowMasterAdmin(true)}
