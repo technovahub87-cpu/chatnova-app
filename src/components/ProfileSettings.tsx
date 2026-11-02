@@ -10,13 +10,15 @@ import {
   CheckCircle,
   AlertCircle,
   Camera,
-  Trash2
+  Trash2,
+  ShieldCheck
 } from 'lucide-react';
 
 import { User as ChatNovaUser } from '../types';
 import { authAPI, API_BASE_URL } from '../services/api';
 import { profileImageAPI } from '../services/profileImageAPI';
 import { useTheme } from '../context/ThemeContext';
+import PrivacySettings from './PrivacySettings';
 
 interface ProfileSettingsProps {
   currentUser: ChatNovaUser;
@@ -31,6 +33,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 }) => {
   const { isDark } = useTheme();
 
+  const [showPrivacy, setShowPrivacy] = useState(false);
   const [displayName, setDisplayName] = useState(
     currentUser.displayName || ''
   );
@@ -250,6 +253,29 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
         </header>
 
         <form onSubmit={handleSave} className="p-5 space-y-5">
+          <button
+            type="button"
+            onClick={() => setShowPrivacy(true)}
+            className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
+              isDark
+                ? 'border-slate-700 bg-[#202c33]'
+                : 'border-slate-200 bg-slate-50'
+            }`}
+          >
+            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+              <ShieldCheck className="w-5 h-5 text-emerald-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">Privacy & Security</p>
+              <p className="text-xs text-slate-400 mt-1">
+                Last Seen, Profile Photo, Read Receipts and more
+              </p>
+            </div>
+            <span className="text-emerald-500 text-sm font-semibold">
+              Open
+            </span>
+          </button>
+
           <div className="flex flex-col items-center py-3">
             <div className="relative">
               <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
@@ -345,7 +371,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
             <input
               type="text"
               value={displayName}
-              onChange={(event) => setDisplayName(event.target.value)}
+              onChange={event => setDisplayName(event.target.value)}
               maxLength={50}
               required
               placeholder="Enter your name"
@@ -390,7 +416,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
             <textarea
               value={bio}
-              onChange={(event) => setBio(event.target.value)}
+              onChange={event => setBio(event.target.value)}
               maxLength={160}
               rows={3}
               placeholder="Write something about yourself..."
@@ -434,6 +460,10 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
           </button>
         </form>
       </div>
+
+      {showPrivacy && (
+        <PrivacySettings onClose={() => setShowPrivacy(false)} />
+      )}
     </div>
   );
 };
