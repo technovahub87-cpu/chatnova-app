@@ -41,7 +41,6 @@ function AppContent() {
 
         if (!result.success || !result.data) {
           removeAuthToken();
-
           if (!cancelled) {
             setCurrentUser(null);
             setCheckingSession(false);
@@ -54,7 +53,6 @@ function AppContent() {
 
         if (!userData || !(userData._id || userData.id)) {
           removeAuthToken();
-
           if (!cancelled) {
             setCurrentUser(null);
             setCheckingSession(false);
@@ -66,9 +64,7 @@ function AppContent() {
           id: String(userData._id || userData.id),
           customId: userData.customId || '',
           displayName: userData.displayName || 'ChatNova User',
-          avatar:
-            userData.avatar ||
-            'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+          avatar: userData.avatar || '',
           bio: userData.bio || '',
           status: userData.status || 'offline',
           lastSeen: userData.lastSeen || 'Recently',
@@ -81,20 +77,13 @@ function AppContent() {
           isBanned: Boolean(userData.isBanned)
         };
 
-        if (!cancelled) {
-          setCurrentUser(restoredUser);
-        }
+        if (!cancelled) setCurrentUser(restoredUser);
       } catch (error) {
         console.error('[ChatNova] Session restore failed:', error);
         removeAuthToken();
-
-        if (!cancelled) {
-          setCurrentUser(null);
-        }
+        if (!cancelled) setCurrentUser(null);
       } finally {
-        if (!cancelled) {
-          setCheckingSession(false);
-        }
+        if (!cancelled) setCheckingSession(false);
       }
     };
 
@@ -103,14 +92,6 @@ function AppContent() {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setShowSplash(false);
-    }, 2000);
-
-    return () => window.clearTimeout(timer);
   }, []);
 
   useEffect(() => {
@@ -134,12 +115,8 @@ function AppContent() {
   }, [currentUser?.id]);
 
   const handleLogin = (user: User) => {
-    const token = getAuthToken();
-
-    if (!token) {
-      console.error(
-        '[ChatNova] Login rejected because JWT token is missing.'
-      );
+    if (!getAuthToken()) {
+      console.error('[ChatNova] Login rejected: JWT token is missing.');
       setCurrentUser(null);
       return;
     }
@@ -160,7 +137,11 @@ function AppContent() {
   };
 
   if (showSplash || checkingSession) {
-    return <SplashScreen />;
+    return (
+      <SplashScreen
+        onComplete={() => setShowSplash(false)}
+      />
+    );
   }
 
   return (
