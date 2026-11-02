@@ -1,86 +1,141 @@
+
 import { io, Socket } from 'socket.io-client';
 
 class WebSocketService {
   public socket: Socket | null = null;
-  private listeners: Map<string, Set<Function>> = new Map();
 
-  connect(userData?: { userId?: string; customId?: string }) {
-    if (this.socket && this.socket.connected) {
+  private listeners: Map<string, Set<(...args: any[]) => void>> =
+    new Map();
+
+  private currentToken: string | null = null;
+
+  connect(token?: string): Socket | null {
+    if (!token) {
+      console.warn('[ChatNova WS] Authentication token is missing.');
+      return null;
+    }
+
+    if (
+      this.socket &&
+      this.socket.connected &&
+      this.currentToken === token
+    ) {
       return this.socket;
     }
+
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+    }
+
+    this.currentToken = token;
 
     const BACKEND_URL = 'https://chatnova-app-n20j.onrender.com';
 
     this.socket = io(BACKEND_URL, {
-      auth: userData,
-      query: userData,
+      auth: {
+        token
+      },
       transports: ['websocket', 'polling'],
       withCredentials: true,
       reconnection: true,
+      reconnectionAttempts: 10,
+      reconnectionDelay: 1000,
+      timeout: 15000
     });
 
     this.socket.on('connect', () => {
-      console.log('[ChatNova WS] Connected successfully! ID:', this.socket?.id);
-      if (userData) {
-        this.socket?.emit('auth:init', userData);
-      }
+      console.log(
+        '[ChatNova WS] Connected:',
+        this.socket?.id
+      );
+    });
+
+    this.socket.on('connect_error', (error) => {
+      console.error(
+        '[ChatNova WS] Connection rejected:',
+        error.message
+      );
     });
 
     this.socket.on('disconnect', (reason) => {
       console.log('[ChatNova WS] Disconnected:', reason);
     });
 
-    // Global listener dispatcher
     this.socket.onAny((event, ...args) => {
       const callbacks = this.listeners.get(event);
+
       if (callbacks) {
-        callbacks.forEach((cb) => cb(...args));
+        callbacks.forEach((callback) => {
+          try {
+            callback(...args);
+          } catch (error) {
+            console.error(
+              `[ChatNova WS] Listener error (${event}):`,
+              error
+            );
+          }
+        });
       }
     });
 
     return this.socket;
   }
 
-  on(event: string, callback: Function) {
+  on(
+    event: string,
+    callback: (...args: any[]) => void
+  ): () => void {
     if (!this.listeners.has(event)) {
       this.listeners.set(event, new Set());
     }
-    this.listeners.get(event)?.add(callback);
 
-    if (this.socket) {
-      this.socket.on(event, callback as any);
-    }
+    this.listeners.get(event)?.add(callback);
 
     return () => {
       this.listeners.get(event)?.delete(callback);
-      if (this.socket) {
-        this.socket.off(event, callback as any);
+
+      if (this.listeners.get(event)?.size === 0) {
+        this.listeners.delete(event);
       }
     };
   }
 
-  emit(event: string, data: any) {
-    if (this.socket && this.socket.connected) {
-      this.socket.emit(event, data);
-    } else {
-      this.connect();
-      setTimeout(() => {
-        this.socket?.emit(event, data);
-      }, 800);
+  emit(event: string, data: any): void {
+    if (!this.socket || !this.socket.connected) {
+      console.warn(
+        `[ChatNova WS] Message not sent. Socket is not connected: ${event}`
+      );
+      return;
     }
+
+    this.socket.emit(event, data);
   }
 
-  send(event: string, data: any) {
+  send(event: string, data: any): void {
     this.emit(event, data);
+  }
+
+  disconnect(): void {
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+      this.socket = null;
+    }
+
+    this.currentToken = null;
+    this.listeners.clear();
+  }
+
+  isConnected(): boolean {
+    return Boolean(this.socket?.connected);
   }
 }
 
 export const wsService = new WebSocketService();
 
-// Force bind globally so F12 console can check it directly
 if (typeof window !== 'undefined') {
   (window as any).wsService = wsService;
-  (window as any).checkSocket = () => {
-    return wsService.socket ? wsService.socket.connected : false;
-  };
+  (window as any).checkSocket = () => wsService.isConnected();
 }
