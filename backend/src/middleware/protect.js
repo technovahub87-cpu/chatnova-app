@@ -1,60 +1,96 @@
+
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
 const protect = async (req, res, next) => {
   try {
-    let token;
+    // JWT secret must be configured in the server environment.
+    const secret = process.env.JWT_SECRET;
 
-    const authHeader = req.headers.authorization;
-    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
-      const parts = authHeader.split(' ');
-      if (parts.length === 2) {
-        token = parts[1];
-      }
+    if (!secret) {
+      console.error('[Auth] JWT_SECRET is missing.');
+      return res.status(500).json({
+        success: false,
+        message: 'Authentication service is not configured.',
+      });
     }
+
+    // Read Bearer token.
+    const authHeader = req.headers.authorization;
+
+    if (
+      !authHeader ||
+      typeof authHeader !== 'string' ||
+      !authHeader.startsWith('Bearer ')
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Access denied. Authentication token is required.',
+      });
+    }
+
+    const token = authHeader.substring(7).trim();
 
     if (!token) {
       return res.status(401).json({
         success: false,
-        message: 'Access denied. No cryptographic authorization token provided.',
+        message: 'Authentication token is empty.',
       });
     }
 
-    const secret = process.env.JWT_SECRET || 'chatnova_super_secret_jwt_key_2026_post_quantum';
+    // Verify token signature and expiration.
     const decoded = jwt.verify(token, secret);
 
     if (!decoded || !decoded.id) {
       return res.status(401).json({
         success: false,
-        message: 'Invalid token payload signature.',
+        message: 'Invalid authentication token.',
       });
     }
 
+    // Find the account.
     const user = await User.findById(decoded.id);
 
     if (!user) {
       return res.status(401).json({
         success: false,
-        message: 'Decentralized identity not found.',
+        message: 'Account not found.',
       });
     }
 
+    // Reject tokens issued before a password reset when the
+    // token contains a tokenVersion claim.
+    if (
+      decoded.tokenVersion !== undefined &&
+      decoded.tokenVersion !== (user.tokenVersion || 0)
+    ) {
+      return res.status(401).json({
+        success: false,
+        message: 'Your session has expired. Please log in again.',
+      });
+    }
+
+    // Block suspended accounts.
     if (user.isBanned) {
       return res.status(403).json({
         success: false,
-        message: 'Identity has been suspended by Master Administration.',
+        message: 'This account has been suspended.',
         banReason: user.banReason || 'Administrative suspension',
       });
     }
 
     req.user = user;
-    next();
+    return next();
+
   } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('[Auth Protect Middleware Error]:', errorMsg);
+    console.error(
+      '[Auth Protect Middleware Error]:',
+      error instanceof Error ? error.message : String(error)
+    );
+
     return res.status(401).json({
       success: false,
-      message: 'Token verification failed or signature expired.',
+      message: 'Authentication failed. Please log in again.',
     });
   }
 };
