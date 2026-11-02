@@ -1,3 +1,4 @@
+
 const PrivacySettings = require('../models/PrivacySettings');
 const User = require('../models/User');
 
@@ -118,9 +119,10 @@ const updatePrivacySettings = async (req, res) => {
       { user: user._id },
       {
         $set: updates,
+        // Mongoose schema defaults will fill the remaining fields.
+        // Do not repeat fields from $set inside $setOnInsert.
         $setOnInsert: {
-          user: user._id,
-          ...DEFAULT_SETTINGS
+          user: user._id
         }
       },
       {
