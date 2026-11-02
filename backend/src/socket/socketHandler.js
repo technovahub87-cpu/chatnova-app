@@ -1,11 +1,12 @@
 
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/User');
+const Conversation = require('../models/Conversation');
 
 const onlineUsers = new Map();
 
 module.exports = (io) => {
-  // Every socket connection must have a valid ChatNova JWT.
   io.use(async (socket, next) => {
     try {
       const token = socket.handshake.auth?.token;
@@ -69,10 +70,7 @@ module.exports = (io) => {
 
     console.log('[Socket Connected]:', user.customId);
 
-    // Only the authenticated user's private room is joined.
-    const privateRoom = `user:${user.id}`;
-
-    socket.join(privateRoom);
+    socket.join(`user:${user.id}`);
     onlineUsers.set(user.id, socket.id);
 
     socket.emit('socket:authenticated', {
@@ -81,31 +79,112 @@ module.exports = (io) => {
       customId: user.customId
     });
 
-    // Never accept identity information from the client.
+    // Join only conversations where this user is a participant.
+    socket.on('chat:join', async (data = {}) => {
+      try {
+        const conversationId = data.conversationId;
+
+        if (
+          typeof conversationId !== 'string' ||
+          !mongoose.Types.ObjectId.isValid(conversationId)
+        ) {
+          return socket.emit('socket:error', {
+            message: 'Invalid conversation ID.'
+          });
+        }
+
+        const conversation = await Conversation.findOne({
+          _id: conversationId,
+          participants: user.id,
+          isActive: true
+        }).select('_id');
+
+        if (!conversation) {
+          return socket.emit('socket:error', {
+            message: 'You are not a member of this conversation.'
+          });
+        }
+
+        socket.join(`conversation:${conversationId}`);
+
+        socket.emit('chat:joined', {
+          success: true,
+          conversationId
+        });
+      } catch (error) {
+        console.error('[Chat Join Error]:', error.message);
+
+        socket.emit('socket:error', {
+          message: 'Unable to join this conversation.'
+        });
+      }
+    });
+
+    // Leave a conversation room.
+    socket.on('chat:leave', (data = {}) => {
+      const conversationId = data.conversationId;
+
+      if (
+        typeof conversationId !== 'string' ||
+        !mongoose.Types.ObjectId.isValid(conversationId)
+      ) {
+        return;
+      }
+
+      socket.leave(`conversation:${conversationId}`);
+
+      socket.emit('chat:left', {
+        conversationId
+      });
+    });
+
+    // Typing notifications are allowed only for conversation members.
+    socket.on('chat:typing', async (data = {}) => {
+      try {
+        const conversationId = data.conversationId;
+
+        if (
+          typeof conversationId !== 'string' ||
+          !mongoose.Types.ObjectId.isValid(conversationId)
+        ) {
+          return;
+        }
+
+        const conversation = await Conversation.findOne({
+          _id: conversationId,
+          participants: user.id,
+          isActive: true
+        }).select('_id');
+
+        if (!conversation) {
+          return;
+        }
+
+        io.to(`conversation:${conversationId}`)
+          .except(socket.id)
+          .emit('chat:user_typing', {
+            conversationId,
+            userId: user.id,
+            customId: user.customId,
+            displayName: user.displayName,
+            isTyping: data.isTyping === true
+          });
+      } catch (error) {
+        console.error('[Typing Event Error]:', error.message);
+      }
+    });
+
+    // Message sending is handled through the protected REST API.
+    // This prevents clients from injecting unverified sender identities.
+    socket.on('chat:send_message', () => {
+      socket.emit('socket:error', {
+        message: 'Please send messages through the secure ChatNova message API.'
+      });
+    });
+
     socket.on('auth:init', () => {
       socket.emit('socket:error', {
         message: 'Identity is verified automatically during connection.'
-      });
-    });
-
-    // Chat membership verification is not implemented yet.
-    // Reject arbitrary room access until a secure Conversation model exists.
-    socket.on('chat:join', () => {
-      socket.emit('socket:error', {
-        message: 'Chat access is temporarily unavailable while security is being configured.'
-      });
-    });
-
-    // Prevent unauthorised message injection.
-    socket.on('chat:send_message', () => {
-      socket.emit('socket:error', {
-        message: 'Messaging is temporarily disabled until secure chat membership is ready.'
-      });
-    });
-
-    socket.on('chat:typing', () => {
-      socket.emit('socket:error', {
-        message: 'Typing events are temporarily unavailable.'
       });
     });
 
