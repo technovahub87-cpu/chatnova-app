@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -26,6 +27,11 @@ const {
   updatePrivacySettings
 } = require('../controllers/privacyController');
 
+const {
+  getMySessions,
+  revokeSession
+} = require('../controllers/sessionController');
+
 const { protect } = require('../middleware/protect');
 
 router.post('/register', register);
@@ -41,6 +47,9 @@ router.put('/profile', protect, updateProfile);
 
 router.get('/privacy', protect, getPrivacySettings);
 router.put('/privacy', protect, updatePrivacySettings);
+
+router.get('/sessions', protect, getMySessions);
+router.delete('/sessions/:sessionId', protect, revokeSession);
 
 router.get('/profile-image/:userId', getProfileImage);
 router.post('/profile-image', protect, uploadProfileImage);
