@@ -8,11 +8,14 @@ import {
   Save,
   Loader2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Camera,
+  Trash2
 } from 'lucide-react';
 
 import { User as ChatNovaUser } from '../types';
-import { authAPI } from '../services/api';
+import { authAPI, API_BASE_URL } from '../services/api';
+import { profileImageAPI } from '../services/profileImageAPI';
 import { useTheme } from '../context/ThemeContext';
 
 interface ProfileSettingsProps {
@@ -31,19 +34,129 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [displayName, setDisplayName] = useState(
     currentUser.displayName || ''
   );
-
-  const [bio, setBio] = useState(
-    currentUser.bio || ''
-  );
-
+  const [bio, setBio] = useState(currentUser.bio || '');
+  const [photoPreview, setPhotoPreview] = useState('');
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [saving, setSaving] = useState(false);
+  const [photoSaving, setPhotoSaving] = useState(false);
+  const [removingPhoto, setRemovingPhoto] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+
+  const resolveAvatarUrl = (avatar: string) => {
+    if (!avatar) return '';
+    if (avatar.startsWith('http://') || avatar.startsWith('https://')) {
+      return avatar;
+    }
+    const base = API_BASE_URL.replace(/\/api\/?$/, '');
+    return `${base}${avatar.startsWith('/') ? '' : '/'}${avatar}`;
+  };
 
   useEffect(() => {
     setDisplayName(currentUser.displayName || '');
     setBio(currentUser.bio || '');
   }, [currentUser]);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreview) {
+        URL.revokeObjectURL(photoPreview);
+      }
+    };
+  }, [photoPreview]);
+
+  const handlePhotoSelect = (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+
+    if (!file) return;
+
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    if (file.size > 2 * 1024 * 1024) {
+      setErrorMessage('Photo must be 2 MB or smaller.');
+      return;
+    }
+
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type)) {
+      setErrorMessage('Only JPG, PNG and WEBP photos are allowed.');
+      return;
+    }
+
+    setSelectedFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handlePhotoUpload = async () => {
+    if (!selectedFile) {
+      setErrorMessage('Please select a photo first.');
+      return;
+    }
+
+    setPhotoSaving(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      const result = await profileImageAPI.upload(selectedFile);
+
+      if (!result.success || !result.avatar) {
+        setErrorMessage(result.message || 'Photo upload failed.');
+        return;
+      }
+
+      const updatedUser: ChatNovaUser = {
+        ...currentUser,
+        avatar: resolveAvatarUrl(result.avatar)
+      };
+
+      onUpdateUser(updatedUser);
+      setSelectedFile(null);
+      setPhotoPreview('');
+      setSuccessMessage('Profile photo updated successfully.');
+    } catch {
+      setErrorMessage('Unable to upload photo. Please try again.');
+    } finally {
+      setPhotoSaving(false);
+    }
+  };
+
+  const handleRemovePhoto = async () => {
+    if (!currentUser.avatar && !selectedFile) {
+      setErrorMessage('There is no profile photo to remove.');
+      return;
+    }
+
+    setRemovingPhoto(true);
+    setErrorMessage('');
+    setSuccessMessage('');
+
+    try {
+      const result = await profileImageAPI.remove();
+
+      if (!result.success) {
+        setErrorMessage(result.message || 'Photo removal failed.');
+        return;
+      }
+
+      const updatedUser: ChatNovaUser = {
+        ...currentUser,
+        avatar: ''
+      };
+
+      onUpdateUser(updatedUser);
+      setSelectedFile(null);
+      setPhotoPreview('');
+      setSuccessMessage('Profile photo removed successfully.');
+    } catch {
+      setErrorMessage('Unable to remove photo. Please try again.');
+    } finally {
+      setRemovingPhoto(false);
+    }
+  };
 
   const handleSave = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -72,9 +185,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       });
 
       if (!result.success || !result.data) {
-        setErrorMessage(
-          result.message || 'Profile could not be updated.'
-        );
+        setErrorMessage(result.message || 'Profile could not be updated.');
         return;
       }
 
@@ -84,8 +195,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       const updatedUser: ChatNovaUser = {
         ...currentUser,
         displayName: savedUser.displayName || cleanName,
-        bio: savedUser.bio ?? cleanBio,
-        avatar: savedUser.avatar || currentUser.avatar
+        bio: savedUser.bio ?? cleanBio
       };
 
       onUpdateUser(updatedUser);
@@ -98,6 +208,9 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       setSaving(false);
     }
   };
+
+  const visiblePhoto =
+    photoPreview || resolveAvatarUrl(currentUser.avatar);
 
   return (
     <div
@@ -138,16 +251,31 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
 
         <form onSubmit={handleSave} className="p-5 space-y-5">
           <div className="flex flex-col items-center py-3">
-            <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
-              {currentUser.avatar ? (
-                <img
-                  src={currentUser.avatar}
-                  alt="Profile"
-                  className="w-full h-full object-cover"
+            <div className="relative">
+              <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
+                {visiblePhoto ? (
+                  <img
+                    src={visiblePhoto}
+                    alt="Profile"
+                    className="w-full h-full object-cover"
+                  />
+                ) : (
+                  <User className="w-14 h-14 text-white" />
+                )}
+              </div>
+
+              <label
+                className="absolute bottom-0 right-0 w-9 h-9 rounded-full bg-emerald-600 hover:bg-emerald-500 text-white flex items-center justify-center cursor-pointer border-2 border-white"
+                title="Choose profile photo"
+              >
+                <Camera className="w-4 h-4" />
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handlePhotoSelect}
+                  className="hidden"
                 />
-              ) : (
-                <User className="w-12 h-12 text-white" />
-              )}
+              </label>
             </div>
 
             <p className="font-semibold mt-3">
@@ -159,8 +287,53 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
             </p>
 
             <p className="text-[11px] text-slate-400 mt-2">
-              Profile photo editing will be added with secure media storage.
+              JPG, PNG or WEBP · Maximum 2 MB
             </p>
+
+            {selectedFile && (
+              <div className="flex gap-2 mt-3">
+                <button
+                  type="button"
+                  onClick={handlePhotoUpload}
+                  disabled={photoSaving}
+                  className="flex items-center gap-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 disabled:opacity-60 text-white text-sm font-semibold px-4 py-2"
+                >
+                  {photoSaving ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Camera className="w-4 h-4" />
+                  )}
+                  {photoSaving ? 'Uploading...' : 'Upload Photo'}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedFile(null);
+                    setPhotoPreview('');
+                  }}
+                  className="rounded-lg border border-slate-500/40 px-3 py-2 text-sm"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {!selectedFile && currentUser.avatar && (
+              <button
+                type="button"
+                onClick={handleRemovePhoto}
+                disabled={removingPhoto}
+                className="flex items-center gap-2 mt-3 text-sm text-rose-500 hover:text-rose-400 disabled:opacity-60"
+              >
+                {removingPhoto ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Trash2 className="w-4 h-4" />
+                )}
+                Remove Photo
+              </button>
+            )}
           </div>
 
           <div>
@@ -257,7 +430,6 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
             ) : (
               <Save className="w-4 h-4" />
             )}
-
             {saving ? 'Saving Profile...' : 'Save Changes'}
           </button>
         </form>
