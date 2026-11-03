@@ -33,27 +33,6 @@ const getId = (value: any): string => {
   return String(value._id || value.id || '');
 };
 
-export const mapBackendUser = (raw: any): User => {
-  return {
-    id: getId(raw),
-    customId: raw?.customId || '@user',
-    displayName: raw?.displayName || raw?.name || 'ChatNova User',
-    avatar: resolveAvatarUrl(raw?.avatar),
-    bio: raw?.bio || '',
-    status: raw?.status || 'offline',
-    lastSeen: raw?.lastSeen || 'Recently',
-    publicKeyFingerprint: raw?.publicKeyFingerprint || '',
-    role: raw?.role || 'user',
-    twoFactorEnabled: Boolean(
-      raw?.twoFactorEnabled || raw?.authenticatorEnabled
-    ),
-    createdAt: raw?.createdAt
-      ? new Date(raw.createdAt).toISOString().split('T')[0]
-      : new Date().toISOString().split('T')[0],
-    isBanned: Boolean(raw?.isBanned)
-  };
-};
-
 export const mapBackendMessage = (
   raw: any,
   currentUserId: string
@@ -61,14 +40,26 @@ export const mapBackendMessage = (
   const senderId = getId(raw?.sender);
   const rawType = raw?.type || 'text';
 
-  const messageType =
+  // Preserve GIF, sticker, video and all supported message types.
+  const messageType: Message['type'] =
     rawType === 'voice' ||
     rawType === 'image' ||
+    rawType === 'video' ||
+    rawType === 'gif' ||
+    rawType === 'sticker' ||
     rawType === 'system'
       ? rawType
-      : rawType === 'file'
+      : rawType === 'file' || rawType === 'document'
         ? 'file'
         : 'text';
+
+  const mediaType: NonNullable<Message['media']>['type'] =
+    raw?.media?.type === 'image' ||
+    raw?.media?.type === 'video' ||
+    raw?.media?.type === 'gif' ||
+    raw?.media?.type === 'sticker'
+      ? raw.media.type
+      : 'file';
 
   return {
     id: getId(raw) || `message_${Date.now()}`,
@@ -93,11 +84,13 @@ export const mapBackendMessage = (
     voice: raw?.voice,
     media: raw?.media
       ? {
-          type: raw.media.type === 'image' ? 'image' : 'file',
+          type: mediaType,
           url: raw.media.url || '',
           name: raw.media.name || 'Attachment',
           size: raw.media.size || '',
-          encryptedHash: raw.media.encryptedHash || ''
+          mimeType: raw.media.mimeType || '',
+          encryptedHash: raw.media.encryptedHash || '',
+          duration: Number(raw.media.duration || 0)
         }
       : undefined
   };
@@ -145,5 +138,26 @@ export const mapBackendConversation = (
     isMuted: false,
     encryptionFingerprint:
       participant.publicKeyFingerprint || ''
+  };
+};
+
+export const mapBackendUser = (raw: any): User => {
+  return {
+    id: getId(raw),
+    customId: raw?.customId || '@user',
+    displayName: raw?.displayName || raw?.name || 'ChatNova User',
+    avatar: resolveAvatarUrl(raw?.avatar),
+    bio: raw?.bio || '',
+    status: raw?.status || 'offline',
+    lastSeen: raw?.lastSeen || 'Recently',
+    publicKeyFingerprint: raw?.publicKeyFingerprint || '',
+    role: raw?.role || 'user',
+    twoFactorEnabled: Boolean(
+      raw?.twoFactorEnabled || raw?.authenticatorEnabled
+    ),
+    createdAt: raw?.createdAt
+      ? new Date(raw.createdAt).toISOString().split('T')[0]
+      : new Date().toISOString().split('T')[0],
+    isBanned: Boolean(raw?.isBanned)
   };
 };
