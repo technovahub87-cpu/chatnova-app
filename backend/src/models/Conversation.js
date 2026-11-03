@@ -81,10 +81,13 @@ const ConversationSchema = new mongoose.Schema(
 );
 
 ConversationSchema.pre('validate', function (next) {
-  if (!Array.isArray(this.participants) || this.participants.length < 2) {
-    return next(new Error('A conversation requires at least two participants.'));
-  }
+  if (!Array.isArray(this.participants) || this.participants.length < 1) {
+  return next(new Error('A conversation requires at least one participant.'));
+}
 
+if (this.type === 'direct' && this.participants.length !== 2) {
+  return next(new Error('A direct conversation must have exactly two participants.'));
+}
   const participantIds = this.participants.map((id) => String(id));
   const uniqueIds = new Set(participantIds);
 
