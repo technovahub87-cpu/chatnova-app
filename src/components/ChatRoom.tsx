@@ -569,6 +569,27 @@ const handleForwardToChat = async (target: Chat) => {
     const remaining = seconds % 60;
     return `${minutes}:${String(remaining).padStart(2, '0')}`;
   };
+  const formatLastSeen = (value?: string) => {
+  if (!value) return 'Recently';
+
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+
+  const parts = new Intl.DateTimeFormat('en-IN', {
+    timeZone: 'Asia/Kolkata',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: true
+  }).formatToParts(date);
+
+  const get = (type: string) =>
+    parts.find(part => part.type === type)?.value || '';
+
+  return `${get('day')}-${get('month')}-${get('year')} ${get('hour')}:${get('minute')} ${get('dayPeriod').toLowerCase()}`;
+};
 
   const chatTitle = chat.isGroup
     ? chat.groupName
