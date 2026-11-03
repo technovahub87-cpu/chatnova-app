@@ -1,6 +1,11 @@
 
 import React, { useEffect, useState } from 'react';
-import { X, Search, Loader2, Image as ImageIcon } from 'lucide-react';
+import {
+  X,
+  Search,
+  Loader2,
+  Image as ImageIcon
+} from 'lucide-react';
 
 interface GifStickerPickerProps {
   isDark: boolean;
@@ -8,21 +13,42 @@ interface GifStickerPickerProps {
   onSelect: (url: string, type: 'gif' | 'sticker') => void;
 }
 
-interface TenorMedia {
+interface GiphyMedia {
   id: string;
   url: string;
   preview: string;
   description: string;
 }
 
-const TENOR_API_KEY =
-  import.meta.env.VITE_TENOR_API_KEY || '';
+interface GiphyImageSet {
+  original?: {
+    url?: string;
+    webp?: string;
+  };
+  fixed_width?: {
+    url?: string;
+    webp?: string;
+  };
+  fixed_width_small?: {
+    url?: string;
+    webp?: string;
+  };
+  downsized?: {
+    url?: string;
+  };
+}
 
-const STICKER_EMOJIS = [
-  '😍','🥰','😘','😂','🤣','😭','😎','🥳',
-  '🤩','😡','😱','🤗','🙏','👏','👍','❤️',
-  '🔥','💯','🎉','🌹','💖','🤝','😴','🤔'
-];
+interface GiphyItem {
+  id: string;
+  title?: string;
+  images?: GiphyImageSet;
+}
+
+const GIPHY_API_KEY =
+  import.meta.env.VITE_GIPHY_API_KEY || '';
+
+const GIPHY_BASE_URL =
+  'https://api.giphy.com/v1';
 
 export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
   isDark,
@@ -31,76 +57,126 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'gif' | 'sticker'>('gif');
   const [search, setSearch] = useState('');
-  const [results, setResults] = useState<TenorMedia[]>([]);
+  const [results, setResults] = useState<GiphyMedia[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (activeTab !== 'gif') return;
-
-    if (!TENOR_API_KEY) {
+    if (!GIPHY_API_KEY) {
       setResults([]);
-      setError('GIF search ke liye Tenor API key configure karni hogi.');
+      setError('GIPHY API Key configure nahi hui hai.');
       return;
     }
 
     const controller = new AbortController();
 
-    const loadGifs = async () => {
+    const loadMedia = async () => {
       setLoading(true);
       setError('');
 
       try {
+        const trimmedSearch = search.trim();
+
+        const endpoint = activeTab === 'gif'
+          ? trimmedSearch
+            ? `${GIPHY_BASE_URL}/gifs/search`
+            : `${GIPHY_BASE_URL}/gifs/trending`
+          : trimmedSearch
+            ? `${GIPHY_BASE_URL}/stickers/search`
+            : `${GIPHY_BASE_URL}/stickers/trending`;
+
         const params = new URLSearchParams({
-          key: TENOR_API_KEY,
-          client_key: 'chatnova',
-          q: search.trim() || 'trending',
+          api_key: GIPHY_API_KEY,
           limit: '24',
-          media_filter: 'tinygif,gif',
-          contentfilter: 'medium'
+          rating: 'pg',
+          lang: 'en',
+          bundle: 'messaging_non_clips'
         });
 
+        if (trimmedSearch) {
+          params.set('q', trimmedSearch);
+        }
+
         const response = await fetch(
-          `https://tenor.googleapis.com/v2/search?${params.toString()}`,
-          { signal: controller.signal }
+          `${endpoint}?${params.toString()}`,
+          {
+            signal: controller.signal
+          }
         );
 
         if (!response.ok) {
-          throw new Error('GIF search service unavailable.');
+          if (response.status === 401 || response.status === 403) {
+            throw new Error(
+              'GIPHY API Key invalid hai ya access allow nahi hai.'
+            );
+          }
+
+          if (response.status === 429) {
+            throw new Error(
+              'GIPHY search limit poori ho gayi. Thodi der baad try karein.'
+            );
+          }
+
+          throw new Error('GIPHY service abhi available nahi hai.');
         }
 
         const data = await response.json();
 
-        const items: TenorMedia[] = (data.results || [])
-          .map((item: any) => {
-            const formats = item.media_formats || {};
-            const preview = formats.tinygif?.url || formats.gif?.url;
-            const full = formats.gif?.url || preview;
+        if (data.meta?.status !== 200 || !Array.isArray(data.data)) {
+          throw new Error('GIPHY se valid results nahi mile.');
+        }
 
-            if (!full || !preview) return null;
+        const items: GiphyMedia[] = data.data
+          .map((item: GiphyItem) => {
+            const images = item.images || {};
+
+            const original =
+              activeTab === 'sticker'
+                ? images.original?.webp || images.original?.url
+                : images.original?.url;
+
+            const preview =
+              images.fixed_width_small?.webp ||
+              images.fixed_width_small?.url ||
+              images.fixed_width?.webp ||
+              images.fixed_width?.url ||
+              images.downsized?.url ||
+              original;
+
+            if (!original || !preview) return null;
 
             return {
               id: String(item.id),
-              url: full,
+              url: original,
               preview,
-              description: String(item.content_description || 'GIF')
+              description: String(
+                item.title ||
+                (activeTab === 'gif' ? 'GIF' : 'Sticker')
+              )
             };
           })
-          .filter(Boolean);
+          .filter((item: GiphyMedia | null): item is GiphyMedia => item !== null);
 
         setResults(items);
 
         if (!items.length) {
-          setError('No GIFs found. Try another search.');
+          setError('Koi result nahi mila. Dusra search try karein.');
         }
       } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') return;
+        if (
+          err instanceof Error &&
+          err.name === 'AbortError'
+        ) {
+          return;
+        }
 
         setResults([]);
+
         setError(
           err instanceof Error
             ? err.message
-            : 'Unable to load GIFs.'
+            : 'Media load nahi ho paya.'
         );
       } finally {
         if (!controller.signal.aborted) {
@@ -109,7 +185,7 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
       }
     };
 
-    const timer = window.setTimeout(loadGifs, 350);
+    const timer = window.setTimeout(loadMedia, 350);
 
     return () => {
       window.clearTimeout(timer);
@@ -125,12 +201,24 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
     ? 'hover:bg-slate-700/70'
     : 'hover:bg-slate-100';
 
+  const handleSelect = (item: GiphyMedia) => {
+    if (selectedId) return;
+
+    setSelectedId(item.id);
+    onSelect(item.url, activeTab);
+  };
+
   return (
-    <div className={`w-[min(92vw,360px)] rounded-2xl border shadow-2xl overflow-hidden ${panelClass}`}>
+    <div
+      className={`w-[min(92vw,380px)] rounded-2xl border shadow-2xl overflow-hidden ${panelClass}`}
+    >
       <div className="flex items-center justify-between px-3 py-3 border-b border-slate-500/20">
         <div className="flex items-center gap-2">
           <ImageIcon className="w-4 h-4 text-emerald-500" />
-          <h3 className="text-sm font-bold">GIFs & Stickers</h3>
+
+          <h3 className="text-sm font-bold">
+            GIFs & Stickers
+          </h3>
         </div>
 
         <button
@@ -146,7 +234,10 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
       <div className="grid grid-cols-2 p-2 gap-2">
         <button
           type="button"
-          onClick={() => setActiveTab('gif')}
+          onClick={() => {
+            setSelectedId(null);
+            setActiveTab('gif');
+          }}
           className={`py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'gif'
               ? 'bg-emerald-600 text-white'
@@ -158,7 +249,10 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
 
         <button
           type="button"
-          onClick={() => setActiveTab('sticker')}
+          onClick={() => {
+            setSelectedId(null);
+            setActiveTab('sticker');
+          }}
           className={`py-2 rounded-xl text-xs font-bold transition ${
             activeTab === 'sticker'
               ? 'bg-emerald-600 text-white'
@@ -169,91 +263,93 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
         </button>
       </div>
 
-      {activeTab === 'gif' ? (
-        <>
-          <div className="px-3 pb-2">
-            <div className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
-              isDark ? 'bg-[#111b21]' : 'bg-slate-100'
-            }`}>
-              <Search className="w-4 h-4 opacity-60" />
+      <div className="px-3 pb-2">
+        <div
+          className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
+            isDark ? 'bg-[#111b21]' : 'bg-slate-100'
+          }`}
+        >
+          <Search className="w-4 h-4 opacity-60" />
 
-              <input
-                type="search"
-                value={search}
-                onChange={event => setSearch(event.target.value)}
-                placeholder="Search GIFs..."
-                className="flex-1 bg-transparent outline-none text-xs"
-              />
+          <input
+            type="search"
+            value={search}
+            onChange={event => {
+              setSearch(event.target.value);
+              setSelectedId(null);
+            }}
+            placeholder={
+              activeTab === 'gif'
+                ? 'Search GIFs...'
+                : 'Search Stickers...'
+            }
+            className="flex-1 bg-transparent outline-none text-xs"
+          />
 
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  className="opacity-60"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
+          {search && (
+            <button
+              type="button"
+              onClick={() => setSearch('')}
+              className="opacity-60"
+              aria-label="Clear search"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="h-64 overflow-y-auto p-2">
+        {loading ? (
+          <div className="h-full flex flex-col items-center justify-center gap-2 text-emerald-500">
+            <Loader2 className="w-6 h-6 animate-spin" />
+
+            <span className="text-xs">
+              Loading {activeTab === 'gif' ? 'GIFs' : 'Stickers'}...
+            </span>
           </div>
-
-          <div className="h-64 overflow-y-auto p-2">
-            {loading ? (
-              <div className="h-full flex flex-col items-center justify-center gap-2 text-emerald-500">
-                <Loader2 className="w-6 h-6 animate-spin" />
-                <span className="text-xs">Loading GIFs...</span>
-              </div>
-            ) : error ? (
-              <div className="h-full flex items-center justify-center text-center p-4">
-                <p className="text-xs opacity-70">{error}</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-3 gap-2">
-                {results.map(item => (
-                  <button
-                    key={item.id}
-                    type="button"
-                    onClick={() => onSelect(item.url, 'gif')}
-                    title={item.description}
-                    className="rounded-lg overflow-hidden bg-black/10 aspect-square hover:ring-2 hover:ring-emerald-500"
-                  >
-                    <img
-                      src={item.preview}
-                      alt={item.description}
-                      loading="lazy"
-                      className="w-full h-full object-cover"
-                    />
-                  </button>
-                ))}
-              </div>
-            )}
+        ) : error ? (
+          <div className="h-full flex items-center justify-center text-center p-4">
+            <p className="text-xs opacity-70">
+              {error}
+            </p>
           </div>
-
-          <div className="px-3 py-2 text-center border-t border-slate-500/20">
-            <span className="text-[10px] opacity-50">GIFs powered by Tenor</span>
-          </div>
-        </>
-      ) : (
-        <div className="p-3">
-          <p className="text-xs opacity-60 mb-3">
-            Sticker pack selection will be connected in the next step.
-          </p>
-
-          <div className="grid grid-cols-4 gap-2">
-            {STICKER_EMOJIS.map((emoji, index) => (
-              <div
-                key={`${emoji}-${index}`}
-                className={`aspect-square rounded-xl flex items-center justify-center text-3xl ${
-                  isDark ? 'bg-[#111b21]' : 'bg-slate-100'
+        ) : (
+          <div className="grid grid-cols-3 gap-2">
+            {results.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => handleSelect(item)}
+                disabled={Boolean(selectedId)}
+                title={item.description}
+                className={`rounded-lg overflow-hidden bg-black/10 aspect-square transition ${
+                  activeTab === 'sticker'
+                    ? 'p-2'
+                    : ''
+                } ${
+                  selectedId === item.id
+                    ? 'ring-2 ring-emerald-500'
+                    : 'hover:ring-2 hover:ring-emerald-500'
                 }`}
-                title={emoji}
               >
-                {emoji}
-              </div>
+                <img
+                  src={item.preview}
+                  alt={item.description}
+                  loading="lazy"
+                  className="w-full h-full object-contain"
+                />
+              </button>
             ))}
           </div>
-        </div>
-      )}
+        )}
+      </div>
+
+      <div className="px-3 py-2 text-center border-t border-slate-500/20">
+        <span className="text-[10px] opacity-60">
+          Powered by GIPHY
+        </span>
+      </div>
     </div>
   );
 };
