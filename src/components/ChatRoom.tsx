@@ -1287,7 +1287,7 @@ const handleForwardToChat = async (target: Chat) => {
     </>
   )}
 </div>
-
+</div>
             <div className={`p-3 rounded-2xl border text-xs space-y-2 mb-4 ${
               isDark
                 ? 'bg-[#111b21] border-slate-700/60'
