@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const PrivacySettings = require('../models/PrivacySettings');
+const { isBlockedBetween } = require('../services/blockService');
 
 const getMessages = async (req, res) => {
   try {
@@ -188,6 +189,15 @@ const sendMessage = async (req, res) => {
     const recipient = conversation.type === 'direct'
       ? otherParticipants[0]
       : null;
+    if (
+  recipient &&
+  await isBlockedBetween(req.user._id, recipient._id)
+) {
+  return res.status(403).json({
+    success: false,
+    message: 'Messaging is unavailable because one of these users has blocked the other.'
+  });
+}
 
     const io = req.app.get('io');
 
