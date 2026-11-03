@@ -58,6 +58,11 @@ const {
   getStatusViewers
 } = require('../controllers/statusController');
 
+const {
+  createMediaStatus,
+  getStatusMedia
+} = require('../controllers/statusMediaController');
+
 const { protect } = require('../middleware/protect');
 
 // Registration and login
@@ -100,6 +105,8 @@ router.post('/device-pairing/complete', completeDevicePairing);
 // Status
 router.get('/statuses', protect, getStatuses);
 router.post('/statuses', protect, createStatus);
+router.post('/statuses/media', protect, createMediaStatus);
+router.get('/statuses/:statusId/media', protect, getStatusMedia);
 router.post('/statuses/:statusId/view', protect, markStatusViewed);
 router.get('/statuses/:statusId/viewers', protect, getStatusViewers);
 router.delete('/statuses/:statusId', protect, deleteStatus);
