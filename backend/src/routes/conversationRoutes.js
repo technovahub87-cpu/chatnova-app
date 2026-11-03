@@ -8,7 +8,8 @@ const {
   createDirectConversation,
   createGroupConversation,
   getMyConversations,
-  getConversationById
+  getConversationById,
+  leaveGroupConversation
 } = require('../controllers/conversationController');
 
 // All conversation routes require an authenticated account.
@@ -24,6 +25,7 @@ router.post('/direct', createDirectConversation);
 router.post('/group', createGroupConversation);
 
 // Open a conversation only if the logged-in user is a member.
+router.post('/:conversationId/leave', leaveGroupConversation);
 router.get('/:conversationId', getConversationById);
 
 module.exports = router;
