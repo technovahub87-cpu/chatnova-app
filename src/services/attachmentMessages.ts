@@ -1,4 +1,3 @@
-
 import { API_BASE_URL, getAuthToken } from './api';
 
 const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
@@ -34,9 +33,10 @@ const getApiUrl = (path: string) => {
   return API_BASE_URL + (path.startsWith('/') ? '' : '/') + path;
 };
 
-export const uploadAttachment = async (
+const uploadFile = async (
   conversationId: string,
-  file: File
+  file: File,
+  messageType: 'attachment' | 'sticker'
 ) => {
   if (!conversationId) {
     throw new Error('Chat conversation was not found.');
@@ -51,6 +51,13 @@ export const uploadAttachment = async (
   }
 
   if (
+    messageType === 'sticker' &&
+    !ALLOWED_IMAGE_TYPES.includes(file.type)
+  ) {
+    throw new Error('Sticker must be a JPG, PNG, GIF or WEBP image.');
+  }
+
+  if (
     file.type.startsWith('image/') &&
     !ALLOWED_IMAGE_TYPES.includes(file.type)
   ) {
@@ -58,6 +65,16 @@ export const uploadAttachment = async (
   }
 
   const token = getToken();
+
+  const headers: Record<string, string> = {
+    Authorization: 'Bearer ' + token,
+    'Content-Type': file.type || 'application/octet-stream',
+    'X-File-Name': encodeURIComponent(file.name)
+  };
+
+  if (messageType === 'sticker') {
+    headers['X-Message-Type'] = 'sticker';
+  }
 
   const response = await fetch(
     getApiUrl(
@@ -67,11 +84,7 @@ export const uploadAttachment = async (
     ),
     {
       method: 'POST',
-      headers: {
-        Authorization: 'Bearer ' + token,
-        'Content-Type': file.type || 'application/octet-stream',
-        'X-File-Name': encodeURIComponent(file.name)
-      },
+      headers,
       credentials: 'include',
       body: file,
       signal: AbortSignal.timeout(120000)
@@ -85,6 +98,24 @@ export const uploadAttachment = async (
   }
 
   return data.message;
+};
+
+export const uploadAttachment = async (
+  conversationId: string,
+  file: File
+) => {
+  return uploadFile(conversationId, file, 'attachment');
+};
+
+export const uploadStickerAttachment = async (
+  conversationId: string,
+  file: File
+) => {
+  if (file.type !== 'image/png') {
+    throw new Error('Custom stickers must be exported as PNG images.');
+  }
+
+  return uploadFile(conversationId, file, 'sticker');
 };
 
 export const fetchAttachment = async (
