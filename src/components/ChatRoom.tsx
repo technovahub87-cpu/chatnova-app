@@ -658,7 +658,7 @@ const handleForwardToChat = async (target: Chat) => {
     ? `${chat.groupMembers?.length || 0} members in conversation`
     : chat.participant?.status === 'online'
       ? 'Online'
-      : `Last seen: ${chat.participant?.lastSeen || 'Recently'}`}
+      : `Last seen: ${formatLastSeen(chat.participant?.lastSeen)}
 </p>
             </div>
           </div>
