@@ -13,6 +13,10 @@ const {
 } = require('../controllers/authController');
 
 const {
+  changePassword
+} = require('../controllers/passwordController');
+
+const {
   updateProfile
 } = require('../controllers/profileController');
 
@@ -57,6 +61,9 @@ router.post('/forgot-password', forgotPassword);
 // Authenticator
 router.post('/authenticator/setup', protect, setupAuthenticator);
 router.post('/authenticator/verify-setup', protect, verifyAuthenticatorSetup);
+
+// Change password
+router.put('/change-password', protect, changePassword);
 
 // User profile
 router.get('/me', protect, getMe);
