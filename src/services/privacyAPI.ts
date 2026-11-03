@@ -6,6 +6,7 @@ export type PrivacySettingsData = {
   profilePhotoVisibility: 'everyone' | 'contacts' | 'nobody';
   aboutVisibility: 'everyone' | 'contacts' | 'nobody';
   onlineStatusVisibility: 'everyone' | 'contacts' | 'nobody';
+  statusVisibility: 'everyone' | 'contacts' | 'nobody';
   readReceipts: boolean;
   groupInvitePermission: 'everyone' | 'contacts';
 };
