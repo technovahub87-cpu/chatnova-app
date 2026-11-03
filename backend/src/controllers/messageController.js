@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
@@ -32,8 +33,6 @@ const getMessages = async (req, res) => {
 
     const filter = {
       chatId: String(conversation._id),
-
-      // Messages deleted only by this user will not appear again.
       deletedFor: { $ne: req.user._id }
     };
 
@@ -159,7 +158,7 @@ const sendMessage = async (req, res) => {
       content = type === 'gif' ? 'GIF attachment' : 'Sticker';
 
       media = {
-        type: type,
+        type,
         url: suppliedUrl,
         name: String(req.body.media?.name || type).slice(0, 180),
         size: '0',
@@ -189,6 +188,31 @@ const sendMessage = async (req, res) => {
       ? otherParticipants[0]
       : null;
 
+    const io = req.app.get('io');
+
+    let deliveryStatus = 'sent';
+    let deliveredAt;
+
+    // A direct message is delivered only when the recipient
+    // currently has an authenticated Socket.IO connection.
+    if (io && recipient) {
+      try {
+        const recipientSockets = await io
+          .in(`user:${recipient._id}`)
+          .fetchSockets();
+
+        if (recipientSockets.length > 0) {
+          deliveryStatus = 'delivered';
+          deliveredAt = new Date();
+        }
+      } catch (socketError) {
+        console.error(
+          '[Delivery Check Error]:',
+          socketError.message
+        );
+      }
+    }
+
     const message = await Message.create({
       chatId: String(conversation._id),
       sender: req.user._id,
@@ -201,7 +225,8 @@ const sendMessage = async (req, res) => {
       type,
       content,
       ...(media ? { media } : {}),
-      status: 'sent'
+      status: deliveryStatus,
+      ...(deliveredAt ? { deliveredAt } : {})
     });
 
     await Conversation.updateOne(
@@ -223,8 +248,6 @@ const sendMessage = async (req, res) => {
       'customId displayName avatar'
     );
 
-    const io = req.app.get('io');
-
     if (io) {
       for (const participant of conversation.participants) {
         io.to(`user:${participant._id}`).emit(
@@ -232,6 +255,18 @@ const sendMessage = async (req, res) => {
           {
             conversationId: String(conversation._id),
             message
+          }
+        );
+      }
+
+      if (deliveryStatus === 'delivered') {
+        io.to(`user:${req.user._id}`).emit(
+          'chat:message_status',
+          {
+            conversationId: String(conversation._id),
+            messageIds: [String(message._id)],
+            status: 'delivered',
+            deliveredAt
           }
         );
       }
