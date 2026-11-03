@@ -1,5 +1,6 @@
 
 import { API_BASE_URL, getAuthToken } from './api';
+import { uploadStickerAttachment } from './attachmentMessages';
 
 export const sendGifStickerMessage = async (
   conversationId: string,
@@ -12,6 +13,26 @@ export const sendGifStickerMessage = async (
 
   if (!url) {
     throw new Error('GIF or sticker URL is missing.');
+  }
+
+  // Custom stickers created inside Sticker Studio use a temporary
+  // browser Blob URL. Convert it to a PNG File and upload it.
+  if (type === 'sticker' && url.startsWith('blob:')) {
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      throw new Error('Custom sticker preview could not be opened.');
+    }
+
+    const blob = await response.blob();
+
+    const file = new File(
+      [blob],
+      `chatnova-sticker-${Date.now()}.png`,
+      { type: 'image/png' }
+    );
+
+    return uploadStickerAttachment(conversationId, file);
   }
 
   let parsedUrl: URL;
