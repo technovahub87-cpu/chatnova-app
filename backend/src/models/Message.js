@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const MessageSchema = new mongoose.Schema(
@@ -33,7 +34,7 @@ const MessageSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['text', 'voice', 'image', 'file', 'system'],
+      enum: ['text', 'voice', 'image', 'video', 'file', 'system'],
       default: 'text',
     },
     content: {
@@ -56,6 +57,8 @@ const MessageSchema = new mongoose.Schema(
       url: { type: String, trim: true },
       name: { type: String, trim: true },
       size: { type: String, trim: true },
+      mimeType: { type: String, trim: true },
+      duration: { type: Number, default: 0 },
       encryptedHash: { type: String, trim: true },
     },
     reactions: {
@@ -75,7 +78,7 @@ const MessageSchema = new mongoose.Schema(
   }
 );
 
-// Compound index for fast timeline queries
 MessageSchema.index({ chatId: 1, createdAt: -1 });
 
-module.exports = mongoose.models.Message || mongoose.model('Message', MessageSchema);
+module.exports =
+  mongoose.models.Message || mongoose.model('Message', MessageSchema);
