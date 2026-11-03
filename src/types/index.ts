@@ -1,5 +1,5 @@
 export type MessageStatus = 'sending' | 'sent' | 'delivered' | 'read';
-export type MessageType = 'text' | 'voice' | 'image' | 'file' | 'document' | 'system';
+export type MessageType = 'text' | 'voice' | 'video' | 'image' | 'file' | 'document' | 'system';
 
 export interface VoiceData {
   duration: number;
@@ -14,6 +14,7 @@ export interface MediaAttachment {
   size: string;
   encryptedHash: string;
   mimeType?: string;
+  duration?: number;
 }
 
 export interface Message {
