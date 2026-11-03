@@ -25,6 +25,7 @@ import {
   createBackendDirectChat,
   createBackendGroupChat
 } from '../services/chatBackend';
+import { conversationAPI } from '../services/api';
 import {
   mapBackendConversation,
   resolveAvatarUrl
@@ -309,7 +310,26 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       window.alert(result.message || 'Message could not be sent.');
     }
   };
+  
+    const handleLeaveGroup = async (conversationId: string) => {
+    if (!window.confirm('Kya aap sach mein is group ko leave karna chahte hain?')) {
+      return;
+    }
 
+    const result = await conversationAPI.leaveGroup(conversationId);
+
+    if (!result.success) {
+      window.alert(result.message || 'Group leave nahi ho paya.');
+      return;
+    }
+
+    setChats((previous) =>
+      previous.filter((chat) => chat.id !== conversationId)
+    );
+
+    setActiveChatId(null);
+    window.alert('Aap successfully group se leave ho gaye hain.');
+  };
   const handleCall = (type: 'voice' | 'video') => {
     if (!activeChatId) {
       window.alert('Please open a conversation first.');
@@ -867,6 +887,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
             currentUser={currentUser}
             messages={activeMessages}
             onSendMessage={handleSendMessage}
+            onLeaveGroup={handleLeaveGroup}
             onBack={() => setActiveChatId(null)}
             onUpdateChat={(updatedChat: Chat) => {
               setChats((previous) =>
