@@ -143,13 +143,27 @@ module.exports = (io) => {
           isActive: true
         }).select('_id');
 
-        if (!conversation) {
-          return socket.emit('socket:error', {
-            message: 'You are not a member of this conversation.'
-          });
-        }
+        }).select('_id type participants');
 
-        socket.join(`conversation:${conversationId}`);
+if (!conversation) {
+  return socket.emit('socket:error', {
+    message: 'You are not a member of this conversation.'
+  });
+}
+
+if (conversation.type === 'direct') {
+  const peerId = conversation.participants
+    .map((id) => String(id))
+    .find((id) => id !== user.id);
+
+  if (peerId && await isBlockedBetween(user.id, peerId)) {
+    return socket.emit('socket:error', {
+      message: 'This chat is unavailable because one of these users has blocked the other.'
+    });
+  }
+}
+
+socket.join(`conversation:${conversationId}`);
 
         socket.emit('chat:joined', {
           success: true,
