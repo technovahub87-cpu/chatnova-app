@@ -27,6 +27,7 @@ import {
 } from '../services/chatMapper';
 import { useTheme } from '../context/ThemeContext';
 import { ThemeToggle } from './ThemeToggle';
+import { CallOverlay } from './CallOverlay';
 
 interface BackendDashboardProps {
   currentUser: User;
@@ -103,6 +104,12 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
   const [creatingChat, setCreatingChat] = useState(false);
   const [localError, setLocalError] = useState('');
   const [showProfile, setShowProfile] = useState(false);
+
+  const [callRequest, setCallRequest] = useState<{
+    id: string;
+    type: 'voice' | 'video';
+    conversationId: string;
+  } | null>(null);
 
   const activeChat = chats.find(
     (chat) => chat.id === activeChatId
@@ -208,9 +215,16 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
   };
 
   const handleCall = (type: 'voice' | 'video') => {
-    window.alert(
-      `${type === 'voice' ? 'Voice' : 'Video'} calling will be connected after the secure calling system is implemented.`
-    );
+    if (!activeChatId) {
+      window.alert('Please open a conversation first.');
+      return;
+    }
+
+    setCallRequest({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      type,
+      conversationId: activeChatId
+    });
   };
 
   const filteredChats = chats.filter((chat) => {
@@ -665,6 +679,11 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           </div>
         )}
       </main>
+
+      <CallOverlay
+        request={callRequest}
+        onRequestHandled={() => setCallRequest(null)}
+      />
 
       {showProfile && (
         <ProfileSettings
