@@ -284,6 +284,43 @@ export const conversationAPI = {
     );
   }
 };
+// BLOCKED USER APIS
+
+export const blockedUserAPI = {
+  list: async () => {
+    return apiFetch<{
+      blockedUsers: {
+        blockId: string;
+        user: {
+          _id: string;
+          customId: string;
+          displayName: string;
+          avatar?: string;
+        };
+        blockedAt: string;
+      }[];
+    }>('/blocked-users', {
+      method: 'GET'
+    });
+  },
+
+  block: async (customId: string) => {
+    return apiFetch<{
+      blockedUser: any;
+    }>('/blocked-users', {
+      method: 'POST',
+      body: JSON.stringify({ customId })
+    });
+  },
+
+  unblock: async (blockedUserId: string) => {
+    return apiFetch<{
+      message: string;
+    }>(`/blocked-users/${encodeURIComponent(blockedUserId)}`, {
+      method: 'DELETE'
+    });
+  }
+};
 
 // MESSAGE APIS
 
