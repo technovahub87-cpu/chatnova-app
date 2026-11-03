@@ -7,6 +7,7 @@ const DEFAULT_SETTINGS = {
   profilePhotoVisibility: 'everyone',
   aboutVisibility: 'everyone',
   onlineStatusVisibility: 'everyone',
+  statusVisibility: 'contacts',
   readReceipts: true,
   groupInvitePermission: 'everyone'
 };
@@ -38,6 +39,7 @@ const getPrivacySettings = async (req, res) => {
         profilePhotoVisibility: settings.profilePhotoVisibility,
         aboutVisibility: settings.aboutVisibility,
         onlineStatusVisibility: settings.onlineStatusVisibility,
+        statusVisibility: settings.statusVisibility,
         readReceipts: settings.readReceipts,
         groupInvitePermission: settings.groupInvitePermission
       }
@@ -70,7 +72,8 @@ const updatePrivacySettings = async (req, res) => {
       'lastSeenVisibility',
       'profilePhotoVisibility',
       'aboutVisibility',
-      'onlineStatusVisibility'
+      'onlineStatusVisibility',
+      'statusVisibility'
     ];
 
     for (const field of visibilityFields) {
@@ -119,8 +122,6 @@ const updatePrivacySettings = async (req, res) => {
       { user: user._id },
       {
         $set: updates,
-        // Mongoose schema defaults will fill the remaining fields.
-        // Do not repeat fields from $set inside $setOnInsert.
         $setOnInsert: {
           user: user._id
         }
@@ -141,6 +142,7 @@ const updatePrivacySettings = async (req, res) => {
         profilePhotoVisibility: settings.profilePhotoVisibility,
         aboutVisibility: settings.aboutVisibility,
         onlineStatusVisibility: settings.onlineStatusVisibility,
+        statusVisibility: settings.statusVisibility,
         readReceipts: settings.readReceipts,
         groupInvitePermission: settings.groupInvitePermission
       }
