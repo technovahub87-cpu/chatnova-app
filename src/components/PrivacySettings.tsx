@@ -12,7 +12,8 @@ import {
   AlertCircle,
   Loader2,
   Save,
-  Lock
+  Lock,
+  CircleDot
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -30,6 +31,7 @@ const DEFAULT_SETTINGS: PrivacySettingsData = {
   profilePhotoVisibility: 'everyone',
   aboutVisibility: 'everyone',
   onlineStatusVisibility: 'everyone',
+  statusVisibility: 'contacts',
   readReceipts: true,
   groupInvitePermission: 'everyone'
 };
@@ -59,7 +61,10 @@ const PrivacySettings: React.FC<PrivacySettingsProps> = ({
       if (!active) return;
 
       if (result.success && result.settings) {
-        setSettings(result.settings);
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...result.settings
+        });
       } else {
         setErrorMessage(
           result.message || 'Privacy settings could not be loaded.'
@@ -98,7 +103,10 @@ const PrivacySettings: React.FC<PrivacySettingsProps> = ({
       const result = await privacyAPI.update(settings);
 
       if (result.success && result.settings) {
-        setSettings(result.settings);
+        setSettings({
+          ...DEFAULT_SETTINGS,
+          ...result.settings
+        });
         setSuccessMessage('Privacy settings saved successfully.');
       } else {
         setErrorMessage(
@@ -133,7 +141,8 @@ const PrivacySettings: React.FC<PrivacySettingsProps> = ({
       | 'lastSeenVisibility'
       | 'profilePhotoVisibility'
       | 'aboutVisibility'
-      | 'onlineStatusVisibility',
+      | 'onlineStatusVisibility'
+      | 'statusVisibility',
     Icon: React.ElementType
   ) => (
     <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 py-4 border-b border-slate-500/15 w-full min-w-0">
@@ -282,6 +291,13 @@ const PrivacySettings: React.FC<PrivacySettingsProps> = ({
                 Wifi
               )}
 
+              {renderVisibility(
+                'Status',
+                'Who can see your 24-hour status updates',
+                'statusVisibility',
+                CircleDot
+              )}
+
               <div className="flex items-center gap-2 mt-6 mb-2">
                 <Lock className="w-4 h-4 text-emerald-500 shrink-0" />
                 <h3 className="text-sm font-bold">Messaging Privacy</h3>
@@ -325,9 +341,9 @@ const PrivacySettings: React.FC<PrivacySettingsProps> = ({
 
               <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-3 mt-4">
                 <p className="text-xs text-amber-600 dark:text-amber-400">
-                  These preferences are saved to your account. Their effect
-                  on profile visibility, group invitations and message read
-                  receipts will be connected separately.
+                  Status visibility preference is saved here. Status access
+                  enforcement will be connected in the status service.
+                  Other privacy controls may also need separate enforcement.
                 </p>
               </div>
 
