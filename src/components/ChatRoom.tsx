@@ -1302,7 +1302,7 @@ const handleForwardToChat = async (target: Chat) => {
         </span>
       ) : (
         <span className="text-gray-400">
-          Last seen: {chat.participant?.lastSeen || 'Recently'}
+          Last seen: {formatLastSeen(chat.participant?.lastSeen)}
         </span>
       )}
     </>
