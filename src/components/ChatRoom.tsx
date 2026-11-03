@@ -4,7 +4,7 @@ import {
   MoreVertical, Phone, Video, Info, FileText, Image as ImageIcon,
   X, Square, Loader2, Film, Smile, Copy, Check
 } from 'lucide-react';
-
+import { markConversationMessagesRead } from '../services/readReceipts';
 import { Chat, Message, User } from '../types';
 import { wsService } from '../services/websocket';
 import { useTheme } from '../context/ThemeContext';
@@ -112,7 +112,11 @@ const [isForwarding, setIsForwarding] = useState(false);
     wsService.joinConversation(chat.id);
     return () => wsService.leaveConversation(chat.id);
   }, [chat?.id]);
+useEffect(() => {
+  if (!chat?.id || chat.isGroup) return;
 
+  markConversationMessagesRead(chat.id);
+}, [chat?.id, messages.length]);
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
