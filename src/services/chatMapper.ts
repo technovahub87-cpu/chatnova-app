@@ -63,7 +63,6 @@ export const mapBackendMessage = (
   const replySource = raw?.replyTo;
   const forwardedSource = raw?.forwardedFrom;
 
-  // Empty MongoDB nested objects must NOT be treated as real replies.
   const replyMessageId = String(
     replySource?.messageId ||
     replySource?.id ||
@@ -71,7 +70,6 @@ export const mapBackendMessage = (
     ''
   );
 
-  // A real forwarded message must have its original message reference.
   const forwardedMessageId = String(
     forwardedSource?.messageId ||
     forwardedSource?.id ||
@@ -98,10 +96,7 @@ export const mapBackendMessage = (
           minute: '2-digit'
         })
       : '',
-    status:
-      senderId === currentUserId
-        ? raw?.status || 'sent'
-        : 'delivered',
+    status: raw?.status || 'sent',
     voice: raw?.voice
       ? {
           duration: Number(raw.voice.duration || 0),
@@ -122,8 +117,6 @@ export const mapBackendMessage = (
           duration: Number(raw.media.duration || 0)
         }
       : undefined,
-
-    // Only attach reply metadata when a real original message exists.
     replyTo: hasRealReply
       ? {
           id: replyMessageId,
@@ -140,8 +133,6 @@ export const mapBackendMessage = (
           mediaUrl: replySource.mediaUrl || ''
         }
       : undefined,
-
-    // Only attach forwarded metadata to genuinely forwarded messages.
     forwardedFrom: hasRealForward
       ? {
           messageId: forwardedMessageId,
@@ -151,7 +142,6 @@ export const mapBackendMessage = (
             'ChatNova User'
         }
       : undefined,
-
     deletedForEveryone: Boolean(raw?.deletedForEveryone),
     reactions: raw?.reactions || undefined,
     isDisappearing: Boolean(raw?.isDisappearing)
