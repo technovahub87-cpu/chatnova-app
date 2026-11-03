@@ -1,4 +1,3 @@
-
 const express = require('express');
 const router = express.Router();
 
@@ -14,6 +13,11 @@ const {
   streamVoiceMessage
 } = require('../controllers/voiceController');
 
+const {
+  uploadVideoMessage,
+  streamMediaFile
+} = require('../controllers/mediaController');
+
 router.use(protect);
 
 // Voice message playback
@@ -27,6 +31,19 @@ router.post(
     limit: '10mb'
   }),
   uploadVoiceMessage
+);
+
+// Video message playback
+router.get('/media/:fileId', streamMediaFile);
+
+// Video message upload
+router.post(
+  '/:conversationId/video',
+  express.raw({
+    type: 'video/*',
+    limit: '50mb'
+  }),
+  uploadVideoMessage
 );
 
 // Normal chat messages
