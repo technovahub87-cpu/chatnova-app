@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
+const PrivacySettings = require('../models/PrivacySettings');
 
 const getMessages = async (req, res) => {
   try {
@@ -310,6 +311,19 @@ const markMessagesRead = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Direct conversation not found or access denied.'
+      });
+    }
+
+    // Respect the user's Read Receipts privacy setting.
+    const privacySettings = await PrivacySettings.findOne({
+      user: req.user._id
+    }).select('readReceipts');
+
+    if (privacySettings?.readReceipts === false) {
+      return res.status(200).json({
+        success: true,
+        message: 'Read receipts are disabled.',
+        readMessageIds: []
       });
     }
 
