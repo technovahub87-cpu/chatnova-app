@@ -114,6 +114,7 @@ module.exports = (io) => {
     console.log('[Socket Connected]:', user.customId);
 
     socket.join(`user:${user.id}`);
+    setUserOnline(io, user.id);
     onlineUsers.set(user.id, socket.id);
 
     socket.emit('socket:authenticated', {
