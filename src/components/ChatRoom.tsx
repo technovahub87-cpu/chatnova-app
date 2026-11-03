@@ -16,6 +16,7 @@ import { uploadAttachment } from '../services/attachmentMessages';
 import { AttachmentMessage } from './AttachmentMessage';
 import { GifStickerPicker } from './GifStickerPicker';
 import { sendGifStickerMessage } from '../services/gifStickerMessages';
+import { performMessageAction } from '../services/messageActions';
 
 interface ChatRoomProps {
   chat: Chat;
@@ -25,6 +26,7 @@ interface ChatRoomProps {
   onBack: () => void;
   onUpdateChat: (updatedChat: Chat) => void;
   onStartCall: (type: 'voice' | 'video') => void;
+  availableChats?: Chat[];
 }
 
 const EMOJIS = [
@@ -64,7 +66,7 @@ const isEmojiOnly = (value: string): boolean => {
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   chat, currentUser, messages, onSendMessage,
-  onBack, onUpdateChat, onStartCall
+  onBack, onUpdateChat, onStartCall, availableChats = []
 }) => {
   const { isDark } = useTheme();
 
@@ -177,7 +179,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     setInputText('');
     setShowEmojiPicker(false);
-    setShowGifStickerPicker(false);
+        setShowGifStickerPicker(false);
   };
 
   const handleGifStickerSelect = async (
@@ -494,6 +496,37 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       setRecordingDuration(0);
     }
   };
+  
+  const handleMessageAction = async (msg: Message, action: 'reply' | 'forward' | 'delete_for_me' | 'delete_for_everyone') => {
+    const messageId = String(msg.id || '');
+    if (!messageId) { window.alert('Message ID nahi mila. Please refresh karke dobara try karein.'); return; }
+    try {
+      if (action === 'reply') {
+        const replyText = window.prompt('Apna reply likhein:');
+        if (!replyText?.trim()) return;
+        await performMessageAction(chat.id, messageId, { action: 'reply', content: replyText.trim() });
+        return;
+      }
+      if (action === 'forward') {
+        const targets = availableChats.filter(item => item.id !== chat.id);
+        if (!targets.length) { window.alert('Forward karne ke liye koi doosri chat available nahi hai.'); return; }
+        const choices = targets.map((item, index) => `${index + 1}. ${item.isGroup ? item.groupName || 'Group' : item.participant?.displayName || 'ChatNova User'}`).join('\\n');
+        const answer = window.prompt(`Kis chat mein forward karna hai? Number likhein:\\n\\n${choices}`);
+        if (!answer) return;
+        const selectedIndex = Number(answer) - 1;
+        if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= targets.length) { window.alert('Galat chat number select hua hai.'); return; }
+        await performMessageAction(chat.id, messageId, { action: 'forward', targetConversationId: targets[selectedIndex].id });
+        window.alert('Message forward ho gaya.');
+        return;
+      }
+      if (action === 'delete_for_me') {
+        if (!window.confirm('Kya aap is message ko sirf apni chat se delete karna chahte hain?')) return;
+      } else if (!window.confirm('Kya aap is message ko sabhi ke liye delete karna chahte hain?')) return;
+      await performMessageAction(chat.id, messageId, { action });
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'Message action complete nahi ho paya.');
+    }
+  };
 
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
@@ -620,8 +653,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           )}
         </div>
       </div>
-
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
+            <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
         <div className="flex justify-center mb-4">
           <div className={`px-3 py-1.5 rounded-xl border text-[11px] font-mono flex items-center gap-2 max-w-md text-center shadow-sm ${
             isDark
@@ -671,13 +703,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                     ? 'bg-[#202c33] text-slate-100 rounded-tl-none'
                     : 'bg-white text-slate-900 rounded-tl-none'
               }`}>
-                {chat.isGroup && !isMe && (
+                {msg.forwardedFrom && <p className="text-[10px] italic opacity-70 mb-1">↪ Forwarded</p>}
+                {msg.replyTo && <div className={`mb-2 px-2 py-1.5 rounded-lg border-l-2 border-emerald-500 text-[10px] ${isDark ? 'bg-black/20' : 'bg-black/5'}`}><p className="font-bold text-emerald-500">Replying to {msg.replyTo.senderName || 'message'}</p><p className="opacity-80 line-clamp-2">{msg.replyTo.content || 'Attachment'}</p></div>}
+                {msg.deletedForEveryone && <p className="italic opacity-60">This message was deleted.</p>}
+                {!msg.deletedForEveryone && chat.isGroup && !isMe && (
                   <p className="text-[10px] font-bold text-teal-400 mb-0.5">
                     {msg.senderName}
                   </p>
                 )}
 
-                {msg.type === 'text' && (
+                {!msg.deletedForEveryone && msg.type === 'text' && (
                   <p className={`break-words ${
                     emojiOnlyMessage
                       ? 'text-5xl sm:text-6xl leading-tight py-1'
@@ -687,11 +722,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </p>
                 )}
 
-                {msg.type === 'image' && msg.media && (
+                {!msg.deletedForEveryone && msg.type === 'image' && msg.media && (
                   <AttachmentMessage media={msg.media} type="image" />
                 )}
 
-                {msg.type === 'video' && msg.media && (
+                {!msg.deletedForEveryone && msg.type === 'video' && msg.media && (
                   <div className="space-y-1.5 mb-1">
                     <VideoMessagePlayer
                       videoUrl={msg.media.url}
@@ -704,11 +739,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </div>
                 )}
 
-                {(msg.type === 'file' || msg.type === 'document') && msg.media && (
+                {!msg.deletedForEveryone && (msg.type === 'file' || msg.type === 'document') && msg.media && (
                   <AttachmentMessage media={msg.media} type="file" />
                 )}
 
-                {msg.type === 'gif' && msg.media?.url && (
+                {!msg.deletedForEveryone && msg.type === 'gif' && msg.media?.url && (
                   <div className="w-56 max-w-full overflow-hidden">
                     <img
                       src={msg.media.url}
@@ -719,7 +754,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   </div>
                 )}
 
-                {msg.type === 'sticker' && msg.media?.url && (
+                {!msg.deletedForEveryone && msg.type === 'sticker' && msg.media?.url && (
                   isUploadedCustomSticker ? (
                     <div className="w-36 h-36 overflow-hidden">
                       <AttachmentMessage
@@ -739,13 +774,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   )
                 )}
 
-                {msg.type === 'voice' && (
+                {!msg.deletedForEveryone && msg.type === 'voice' && (
                   <VoiceMessagePlayer
                     audioUrl={msg.voice?.audioUrl}
                     duration={Number(msg.voice?.duration || 0)}
                   />
                 )}
 
+                {!msg.deletedForEveryone && <div className="flex flex-wrap items-center justify-end gap-1 mt-2 pt-1 border-t border-black/10 text-[9px]">
+                  <button type="button" onClick={() => handleMessageAction(msg, 'reply')} className="px-2 py-1 rounded-md hover:bg-black/10">↩ Reply</button>
+                  <button type="button" onClick={() => handleMessageAction(msg, 'forward')} className="px-2 py-1 rounded-md hover:bg-black/10">➦ Forward</button>
+                  <button type="button" onClick={() => handleMessageAction(msg, 'delete_for_me')} className="px-2 py-1 rounded-md hover:bg-black/10">Delete for me</button>
+                  {isMe && <button type="button" onClick={() => handleMessageAction(msg, 'delete_for_everyone')} className="px-2 py-1 rounded-md text-rose-500 hover:bg-rose-500/10">Delete for everyone</button>}
+                </div>}
                 <div className="flex items-center justify-end gap-2 mt-1 text-[9px] font-mono opacity-75">
                   {canCopy && (
                     <button
@@ -783,8 +824,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
         <div ref={messagesEndRef} />
       </div>
-
-      <div className={`p-3 border-relative ${
+            <div className={`p-3 border-relative ${
         isDark
           ? 'bg-[#202c33] border-slate-800'
           : 'bg-[#f0f2f5] border-slate-200'
@@ -963,8 +1003,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                     accept="image/jpeg,image/png,image/gif,image/webp"
                     className="hidden"
                   />
-
-                  <input
+                                    <input
                     type="file"
                     ref={videoInputRef}
                     onChange={handleVideoUpload}
@@ -1075,8 +1114,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 </span>
               </div>
             </div>
-
-            <button
+                        <button
               type="button"
               onClick={() => setShowInfoModal(false)}
               className="w-full py-2.5 rounded-xl bg-emerald-600 text-white font-bold text-xs"
