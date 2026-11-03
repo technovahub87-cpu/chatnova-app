@@ -9,13 +9,28 @@ const {
   sendMessage
 } = require('../controllers/messageController');
 
-// Every message request requires a valid login.
+const {
+  uploadVoiceMessage,
+  streamVoiceMessage
+} = require('../controllers/voiceController');
+
 router.use(protect);
 
-// Read messages from a conversation.
-router.get('/:conversationId', getMessages);
+// Voice message playback
+router.get('/voice/:fileId', streamVoiceMessage);
 
-// Send a text message to a conversation.
+// Voice message upload
+router.post(
+  '/:conversationId/voice',
+  express.raw({
+    type: 'audio/*',
+    limit: '10mb'
+  }),
+  uploadVoiceMessage
+);
+
+// Normal chat messages
+router.get('/:conversationId', getMessages);
 router.post('/:conversationId', sendMessage);
 
 module.exports = router;
