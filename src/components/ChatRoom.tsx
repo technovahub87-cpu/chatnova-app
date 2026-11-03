@@ -13,11 +13,16 @@ import {
   Info,
   FileText,
   Image as ImageIcon,
-  X
+  X,
+  Square,
+  Loader2
 } from 'lucide-react';
+
 import { Chat, Message, User } from '../types';
 import { wsService } from '../services/websocket';
 import { useTheme } from '../context/ThemeContext';
+import { uploadVoiceMessage } from '../services/voiceMessages';
+import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 
 interface ChatRoomProps {
   chat: Chat;
@@ -36,17 +41,25 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   onSendMessage,
   onBack,
   onUpdateChat,
-  onStartCall,
+  onStartCall
 }) => {
   const { isDark } = useTheme();
+
   const [inputText, setInputText] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const [isUploadingVoice, setIsUploadingVoice] = useState(false);
 
   const recordingTimerRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const cancelRecordingRef = useRef(false);
+  const recordingDurationRef = useRef(0);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -60,7 +73,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     scrollToBottom();
   }, [messages]);
 
-  // Join only the authenticated conversation room.
   useEffect(() => {
     if (!chat?.id) return;
 
@@ -71,12 +83,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     };
   }, [chat?.id]);
 
-  // Stop recording timer when this screen closes.
   useEffect(() => {
     return () => {
       if (recordingTimerRef.current) {
         clearInterval(recordingTimerRef.current);
       }
+
+      cancelRecordingRef.current = true;
+
+      if (mediaRecorderRef.current?.state === 'recording') {
+        mediaRecorderRef.current.stop();
+      }
+
+      mediaStreamRef.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
 
@@ -107,7 +126,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     if (!file) return;
 
-    // File upload is not yet connected to the secure backend.
     window.alert(
       'File and image messaging will be enabled after secure media storage is added.'
     );
@@ -116,19 +134,194 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     setShowAttachMenu(false);
   };
 
-  const startRecording = () => {
-    window.alert(
-      'Voice messaging will be enabled after secure audio storage is added.'
-    );
+  const stopRecordingTimer = () => {
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+  };
+
+  const releaseMicrophone = () => {
+    mediaStreamRef.current?.getTracks().forEach(track => track.stop());
+    mediaStreamRef.current = null;
+  };
+
+  const startRecording = async () => {
+    if (isRecording || isUploadingVoice) return;
+
+    try {
+      if (!navigator.mediaDevices?.getUserMedia) {
+        throw new Error(
+          'Microphone recording requires HTTPS and a supported browser.'
+        );
+      }
+
+      if (typeof MediaRecorder === 'undefined') {
+        throw new Error('Your browser does not support voice recording.');
+      }
+
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        }
+      });
+
+      mediaStreamRef.current = stream;
+      audioChunksRef.current = [];
+      cancelRecordingRef.current = false;
+      recordingDurationRef.current = 0;
+      setRecordingDuration(0);
+
+      let mimeType = '';
+
+      const supportedTypes = [
+        'audio/webm;codecs=opus',
+        'audio/webm',
+        'audio/ogg;codecs=opus',
+        'audio/mp4'
+      ];
+
+      for (const type of supportedTypes) {
+        if (MediaRecorder.isTypeSupported(type)) {
+          mimeType = type;
+          break;
+        }
+      }
+
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      mediaRecorderRef.current = recorder;
+
+      recorder.ondataavailable = event => {
+        if (event.data && event.data.size > 0) {
+          audioChunksRef.current.push(event.data);
+        }
+      };
+
+      recorder.onerror = () => {
+        stopRecordingTimer();
+        releaseMicrophone();
+        setIsRecording(false);
+        window.alert('Recording failed. Please try again.');
+      };
+
+      recorder.onstop = async () => {
+        stopRecordingTimer();
+
+        const cancelled = cancelRecordingRef.current;
+        const chunks = [...audioChunksRef.current];
+        const duration = recordingDurationRef.current;
+        const recordedType = recorder.mimeType || 'audio/webm';
+
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = null;
+
+        releaseMicrophone();
+        setIsRecording(false);
+
+        if (cancelled) {
+          setRecordingDuration(0);
+          return;
+        }
+
+        const audioBlob = new Blob(chunks, {
+          type: recordedType
+        });
+
+        if (duration < 1 || audioBlob.size === 0) {
+          setRecordingDuration(0);
+          window.alert('Please record at least one second of audio.');
+          return;
+        }
+
+        if (audioBlob.size > 10 * 1024 * 1024) {
+          setRecordingDuration(0);
+          window.alert('Voice message must be smaller than 10 MB.');
+          return;
+        }
+
+        setIsUploadingVoice(true);
+
+        try {
+          await uploadVoiceMessage(
+            chat.id,
+            audioBlob,
+            duration
+          );
+
+          setRecordingDuration(0);
+        } catch (error) {
+          window.alert(
+            error instanceof Error
+              ? error.message
+              : 'Voice message could not be sent.'
+          );
+        } finally {
+          setIsUploadingVoice(false);
+        }
+      };
+
+      recorder.start(250);
+
+      setIsRecording(true);
+
+      recordingTimerRef.current = setInterval(() => {
+        recordingDurationRef.current += 1;
+
+        setRecordingDuration(recordingDurationRef.current);
+
+        if (recordingDurationRef.current >= 300) {
+          if (mediaRecorderRef.current?.state === 'recording') {
+            mediaRecorderRef.current.stop();
+          }
+        }
+      }, 1000);
+
+    } catch (error) {
+      releaseMicrophone();
+
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Unable to access microphone. Please allow microphone permission.'
+      );
+    }
   };
 
   const stopAndSendRecording = () => {
-    if (recordingTimerRef.current) {
-      clearInterval(recordingTimerRef.current);
-    }
+    const recorder = mediaRecorderRef.current;
 
-    setIsRecording(false);
-    setRecordingDuration(0);
+    if (recorder?.state === 'recording') {
+      cancelRecordingRef.current = false;
+      recorder.stop();
+    }
+  };
+
+  const cancelRecording = () => {
+    cancelRecordingRef.current = true;
+
+    stopRecordingTimer();
+
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder?.state === 'recording') {
+      recorder.stop();
+    } else {
+      releaseMicrophone();
+      setIsRecording(false);
+      setRecordingDuration(0);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const minutes = Math.floor(seconds / 60);
+    const remaining = seconds % 60;
+
+    return `${minutes}:${String(remaining).padStart(2, '0')}`;
   };
 
   const chatTitle = chat.isGroup
@@ -159,7 +352,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         isDark ? 'bg-[#0b141a]' : 'bg-[#efeae2]'
       }`}
     >
-      {/* HEADER */}
       <div
         className={`px-4 py-2.5 flex items-center justify-between border-b select-none z-20 ${
           isDark
@@ -261,7 +453,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         </div>
       </div>
 
-      {/* MESSAGE LIST */}
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-3">
         <div className="flex justify-center mb-4">
           <div
@@ -340,22 +531,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   )}
 
                 {msg.type === 'voice' && (
-                  <div className="flex items-center gap-3 py-1 min-w-[160px]">
-                    <div className="w-8 h-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
-                      <Mic className="w-4 h-4" />
-                    </div>
-
-                    <div className="flex-1">
-                      <div className="h-1.5 w-full bg-slate-600/50 rounded-full overflow-hidden">
-                        <div className="h-full bg-emerald-400 w-2/3" />
-                      </div>
-
-                      <div className="flex justify-between text-[10px] opacity-75 mt-1 font-mono">
-                        <span>Voice Note</span>
-                        <span>{msg.voice?.duration || '0:00'}</span>
-                      </div>
-                    </div>
-                  </div>
+                  <VoiceMessagePlayer
+                    audioUrl={msg.voice?.audioUrl}
+                    duration={Number(msg.voice?.duration || 0)}
+                  />
                 )}
 
                 <div className="flex items-center justify-end gap-1 mt-1 text-[9px] font-mono opacity-75">
@@ -381,7 +560,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* INPUT FOOTER */}
       <div
         className={`p-3 border-relative ${
           isDark
@@ -390,21 +568,35 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         }`}
       >
         {isRecording ? (
-          <div className="flex items-center justify-between px-4 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30">
+          <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-rose-500/10 border border-rose-500/30">
             <div className="flex items-center gap-3 text-rose-500 font-bold text-xs animate-pulse">
               <span className="w-3 h-3 rounded-full bg-rose-500" />
               <span>
-                Recording ({recordingDuration}s)...
+                Recording {formatTime(recordingDuration)}
               </span>
             </div>
 
             <button
               type="button"
-              onClick={stopAndSendRecording}
-              className="px-4 py-2 rounded-xl bg-slate-700 text-white text-xs"
+              onClick={cancelRecording}
+              className="px-3 py-2 rounded-xl bg-slate-700 text-white text-xs"
             >
               Cancel
             </button>
+
+            <button
+              type="button"
+              onClick={stopAndSendRecording}
+              className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-2"
+            >
+              <Square className="w-3 h-3" />
+              Send
+            </button>
+          </div>
+        ) : isUploadingVoice ? (
+          <div className="flex items-center justify-center gap-2 py-3 text-emerald-500 text-sm">
+            <Loader2 className="w-4 h-4 animate-spin" />
+            Sending voice message...
           </div>
         ) : (
           <form
@@ -484,7 +676,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               <button
                 type="button"
                 onClick={startRecording}
-                title="Voice messages are not enabled yet"
+                title="Record voice message"
                 className="p-3 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
               >
                 <Mic className="w-5 h-5" />
@@ -494,7 +686,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         )}
       </div>
 
-      {/* INFO MODAL */}
       {showInfoModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div
@@ -574,3 +765,5 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     </div>
   );
 };
+
+export default ChatRoom;
