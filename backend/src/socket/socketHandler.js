@@ -3,6 +3,7 @@ const jwt = require('jsonwebtoken');
 const mongoose = require('mongoose');
 const User = require('../models/User');
 const Conversation = require('../models/Conversation');
+const Call = require('../models/Call');
 
 const onlineUsers = new Map();
 const activeCalls = new Map();
@@ -18,6 +19,34 @@ const clearCall = (callId) => {
   const call = activeCalls.get(callId);
   if (call?.ringTimer) clearTimeout(call.ringTimer);
   activeCalls.delete(callId);
+};
+
+const updateCallRecord = async (call, status) => {
+  if (!call?.recordId) return;
+
+  try {
+    const now = new Date();
+    const update = {
+      status,
+      endedAt: now
+    };
+
+    if (status === 'answered') {
+      update.answeredAt = now;
+      update.endedAt = null;
+    }
+
+    if (status === 'ended' && call.answeredAt) {
+      update.duration = Math.max(
+        0,
+        Math.floor((now.getTime() - call.answeredAt.getTime()) / 1000)
+      );
+    }
+
+    await Call.findByIdAndUpdate(call.recordId, update);
+  } catch (error) {
+    console.error('[Call Record Update Error]:', error.message);
+  }
 };
 
 module.exports = (io) => {
@@ -126,7 +155,6 @@ module.exports = (io) => {
         });
       } catch (error) {
         console.error('[Chat Join Error]:', error.message);
-
         socket.emit('socket:error', {
           message: 'Unable to join this conversation.'
         });
@@ -144,7 +172,6 @@ module.exports = (io) => {
       }
 
       socket.leave(`conversation:${conversationId}`);
-
       socket.emit('chat:left', { conversationId });
     });
 
@@ -181,7 +208,6 @@ module.exports = (io) => {
       }
     });
 
-    // Voice and video call invitation
     socket.on('call:invite', async (data = {}) => {
       try {
         const { conversationId, callId } = data;
@@ -234,11 +260,11 @@ module.exports = (io) => {
         }
 
         const alreadyInCall = [...activeCalls.values()].some(
-          (call) =>
-            call.callerId === user.id ||
-            call.calleeId === user.id ||
-            call.callerId === peerId ||
-            call.calleeId === peerId
+          (active) =>
+            active.callerId === user.id ||
+            active.calleeId === user.id ||
+            active.callerId === peerId ||
+            active.calleeId === peerId
         );
 
         if (alreadyInCall) {
@@ -248,20 +274,33 @@ module.exports = (io) => {
           });
         }
 
+        const record = await Call.create({
+          conversation: conversation._id,
+          caller: user.id,
+          receiver: peerId,
+          type: callType,
+          status: 'ringing',
+          startedAt: new Date()
+        });
+
         const call = {
           callId,
+          recordId: String(record._id),
           conversationId,
           callerId: user.id,
           calleeId: peerId,
           type: callType,
           status: 'ringing',
-          ringTimer: null
+          ringTimer: null,
+          answeredAt: null
         };
 
-        call.ringTimer = setTimeout(() => {
+        call.ringTimer = setTimeout(async () => {
           const current = activeCalls.get(callId);
 
           if (!current || current.status !== 'ringing') return;
+
+          await updateCallRecord(current, 'missed');
 
           io.to(`user:${current.callerId}`).emit('call:timeout', {
             callId,
@@ -307,7 +346,7 @@ module.exports = (io) => {
       }
     });
 
-    socket.on('call:accept', (data = {}) => {
+    socket.on('call:accept', async (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
 
@@ -326,6 +365,9 @@ module.exports = (io) => {
 
       call.ringTimer = null;
       call.status = 'connected';
+      call.answeredAt = new Date();
+
+      await updateCallRecord(call, 'answered');
 
       io.to(`user:${call.callerId}`).emit('call:accepted', {
         callId,
@@ -340,7 +382,7 @@ module.exports = (io) => {
       });
     });
 
-    socket.on('call:reject', (data = {}) => {
+    socket.on('call:reject', async (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
 
@@ -352,6 +394,8 @@ module.exports = (io) => {
         return;
       }
 
+      await updateCallRecord(call, 'rejected');
+
       io.to(`user:${call.callerId}`).emit('call:rejected', {
         callId,
         conversationId: call.conversationId,
@@ -361,7 +405,7 @@ module.exports = (io) => {
       clearCall(callId);
     });
 
-    socket.on('call:end', (data = {}) => {
+    socket.on('call:end', async (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
 
@@ -371,6 +415,11 @@ module.exports = (io) => {
       ) {
         return;
       }
+
+      await updateCallRecord(
+        call,
+        call.status === 'connected' ? 'ended' : 'missed'
+      );
 
       const otherUserId =
         call.callerId === user.id ? call.calleeId : call.callerId;
@@ -504,6 +553,11 @@ module.exports = (io) => {
           ) {
             continue;
           }
+
+          await updateCallRecord(
+            call,
+            call.status === 'connected' ? 'ended' : 'missed'
+          );
 
           const otherUserId =
             call.callerId === user.id
