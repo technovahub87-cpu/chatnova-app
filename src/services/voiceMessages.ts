@@ -1,4 +1,4 @@
-
+```typescript
 import { API_BASE_URL, getAuthToken } from './api';
 
 const getToken = () => {
@@ -12,8 +12,15 @@ const getToken = () => {
 };
 
 const getApiUrl = (path: string) => {
+  const apiOrigin = API_BASE_URL.replace(/\/api\/?$/, '');
+
   if (path.startsWith('http://') || path.startsWith('https://')) {
     return path;
+  }
+
+  // Audio URLs already containing /api must not get /api twice.
+  if (path.startsWith('/api/')) {
+    return `${apiOrigin}${path}`;
   }
 
   return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
@@ -90,8 +97,11 @@ export const fetchVoiceAudio = async (
   });
 
   if (!response.ok) {
-    throw new Error('Unable to load voice message audio.');
+    throw new Error(
+      `Unable to load voice message audio. Server error: ${response.status}`
+    );
   }
 
   return response.blob();
 };
+```
