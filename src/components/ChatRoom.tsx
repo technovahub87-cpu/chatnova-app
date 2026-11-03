@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft, Send, Paperclip, Mic, Lock, CheckCheck,
   MoreVertical, Phone, Video, Info, FileText, Image as ImageIcon,
-  X, Square, Loader2, Film, Smile, Copy, Check
+  X, Square, Loader2, Film, Smile, Copy, Check, Download
 } from 'lucide-react';
 
 import { Chat, Message, User } from '../types';
@@ -13,6 +13,8 @@ import { uploadVoiceMessage } from '../services/voiceMessages';
 import { VoiceMessagePlayer } from './VoiceMessagePlayer';
 import { uploadVideoMessage } from '../services/videoMessages';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
+import { uploadAttachment } from '../services/attachmentMessages';
+import { AttachmentMessage } from './AttachmentMessage';
 
 interface ChatRoomProps {
   chat: Chat;
@@ -37,6 +39,21 @@ const EMOJIS = [
   '🌹','🌻','🌺','🍕','🍔','🍟','🍫','☕'
 ];
 
+const MAX_ATTACHMENT_SIZE = 25 * 1024 * 1024;
+
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/gif',
+  'image/webp'
+];
+
+const ALLOWED_DOCUMENT_EXTENSIONS = [
+  'pdf', 'doc', 'docx', 'xls', 'xlsx',
+  'ppt', 'pptx', 'txt', 'csv', 'zip',
+  'rar', 'rtf', 'odt', 'ods'
+];
+
 const isEmojiOnly = (value: string): boolean => {
   const content = value.trim();
   if (!content) return false;
@@ -59,6 +76,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const recordingTimerRef = useRef<any>(null);
@@ -69,8 +87,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const recordingDurationRef = useRef(0);
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const documentInputRef = useRef<HTMLInputElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
@@ -90,9 +109,11 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     return () => {
       if (recordingTimerRef.current) clearInterval(recordingTimerRef.current);
       cancelRecordingRef.current = true;
+
       if (mediaRecorderRef.current?.state === 'recording') {
         mediaRecorderRef.current.stop();
       }
+
       mediaStreamRef.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
@@ -122,6 +143,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       }
 
       setCopiedMessageId(messageId);
+
       window.setTimeout(() => {
         setCopiedMessageId(previous =>
           previous === messageId ? null : previous
@@ -138,6 +160,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
+
     const content = inputText.trim();
     if (!content) return;
 
@@ -149,22 +172,75 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         minute: '2-digit'
       })
     });
+
     setInputText('');
     setShowEmojiPicker(false);
   };
 
-  const handleFileUpload = (
+  // Upload image or document attachment.
+  const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'image' | 'document'
   ) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    window.alert(
-      'Image and document messaging will be enabled separately.'
-    );
-    e.target.value = '';
     setShowAttachMenu(false);
+
+    if (file.size === 0) {
+      window.alert('Selected file is empty.');
+      e.target.value = '';
+      return;
+    }
+
+    if (file.size > MAX_ATTACHMENT_SIZE) {
+      window.alert('Attachment must be smaller than 25 MB.');
+      e.target.value = '';
+      return;
+    }
+
+    if (type === 'image' && !ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      window.alert('Please select JPG, PNG, GIF or WEBP image.');
+      e.target.value = '';
+      return;
+    }
+
+    if (type === 'document') {
+      const extension = file.name.split('.').pop()?.toLowerCase() || '';
+
+      if (!ALLOWED_DOCUMENT_EXTENSIONS.includes(extension)) {
+        window.alert(
+          'Supported files: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, CSV, ZIP and RTF.'
+        );
+        e.target.value = '';
+        return;
+      }
+    }
+
+    if (isUploadingAttachment) {
+      e.target.value = '';
+      return;
+    }
+
+    setIsUploadingAttachment(true);
+
+    try {
+      await uploadAttachment(chat.id, file);
+      window.alert(
+        type === 'image'
+          ? 'Image sent successfully.'
+          : 'File sent successfully.'
+      );
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'Attachment could not be sent. Please try again.'
+      );
+    } finally {
+      setIsUploadingAttachment(false);
+      e.target.value = '';
+    }
   };
 
   const handleVideoUpload = async (
@@ -230,7 +306,12 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   };
 
   const startRecording = async () => {
-    if (isRecording || isUploadingVoice || isUploadingVideo) return;
+    if (
+      isRecording ||
+      isUploadingVoice ||
+      isUploadingVideo ||
+      isUploadingAttachment
+    ) return;
 
     try {
       if (!navigator.mediaDevices?.getUserMedia) {
@@ -258,6 +339,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       setRecordingDuration(0);
 
       let mimeType = '';
+
       const supportedTypes = [
         'audio/webm;codecs=opus',
         'audio/webm',
@@ -355,6 +437,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     } catch (error) {
       releaseMicrophone();
+
       window.alert(
         error instanceof Error
           ? error.message
@@ -365,6 +448,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
   const stopAndSendRecording = () => {
     const recorder = mediaRecorderRef.current;
+
     if (recorder?.state === 'recording') {
       cancelRecordingRef.current = false;
       recorder.stop();
@@ -376,6 +460,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     stopRecordingTimer();
 
     const recorder = mediaRecorderRef.current;
+
     if (recorder?.state === 'recording') {
       recorder.stop();
     } else {
@@ -441,6 +526,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 alt={chatTitle}
                 className="w-10 h-10 rounded-full object-cover ring-1 ring-emerald-500/40"
               />
+
               {!chat.isGroup && chat.participant?.status === 'online' && (
                 <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-[#202c33]" />
               )}
@@ -451,6 +537,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 {chatTitle}
                 <Lock className="w-3 h-3 text-emerald-500 shrink-0" />
               </h3>
+
               <p className="text-[10px] font-mono text-emerald-500 truncate max-w-[200px] sm:max-w-xs">
                 {chatStatusText}
               </p>
@@ -566,14 +653,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 )}
 
                 {msg.type === 'image' && msg.media && (
-                  <div className="space-y-1.5 mb-1">
-                    <img
-                      src={msg.media.url}
-                      alt="media"
-                      className="rounded-xl max-h-60 object-cover w-full cursor-pointer"
-                    />
-                    <p className="text-[10px] opacity-80">{msg.media.name}</p>
-                  </div>
+                  <AttachmentMessage
+                    media={msg.media}
+                    type="image"
+                  />
                 )}
 
                 {msg.type === 'video' && msg.media && (
@@ -582,6 +665,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                       videoUrl={msg.media.url}
                       name={msg.media.name}
                     />
+
                     <p className="text-[10px] opacity-80 flex items-center gap-1">
                       <Film className="w-3 h-3" />
                       {msg.media.name}
@@ -590,15 +674,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 )}
 
                 {(msg.type === 'file' || msg.type === 'document') && msg.media && (
-                  <div className="flex items-center gap-3 p-2 rounded-xl bg-black/25 mb-1">
-                    <FileText className="w-8 h-8 text-emerald-400 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="font-bold truncate">{msg.media.name}</p>
-                      <p className="text-[10px] opacity-75">
-                        {msg.media.size} • Attachment
-                      </p>
-                    </div>
-                  </div>
+                  <AttachmentMessage
+                    media={msg.media}
+                    type="file"
+                  />
                 )}
 
                 {msg.type === 'voice' && (
@@ -629,6 +708,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   )}
 
                   <span>{msg.timestamp}</span>
+
                   {isMe && (
                     <span>
                       <CheckCheck className={`w-3.5 h-3.5 ${
@@ -674,10 +754,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               Send
             </button>
           </div>
-        ) : isUploadingVoice || isUploadingVideo ? (
+        ) : isUploadingVoice || isUploadingVideo || isUploadingAttachment ? (
           <div className="flex items-center justify-center gap-2 py-3 text-emerald-500 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
-            {isUploadingVoice ? 'Sending voice message...' : 'Uploading video...'}
+            {isUploadingVoice
+              ? 'Sending voice message...'
+              : isUploadingVideo
+                ? 'Uploading video...'
+                : 'Uploading attachment...'}
           </div>
         ) : (
           <form onSubmit={handleSend} className="flex items-center gap-2 relative">
@@ -704,6 +788,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-bold">Choose an Emoji</p>
+
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker(false)}
@@ -737,21 +822,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   setShowAttachMenu(!showAttachMenu);
                   setShowEmojiPicker(false);
                 }}
+                title="Attach"
                 className="p-2.5 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
               >
                 <Paperclip className="w-5 h-5" />
               </button>
 
               {showAttachMenu && (
-                <div className={`absolute bottom-12 left-0 z-40 w-48 rounded-2xl border shadow-2xl py-2 text-xs space-y-1 ${
+                <div className={`absolute bottom-12 left-0 z-40 w-52 rounded-2xl border shadow-2xl py-2 text-xs space-y-1 ${
                   isDark
                     ? 'bg-[#233138] border-slate-700 text-slate-100'
                     : 'bg-white border-slate-200 text-slate-800'
                 }`}>
                   <button
                     type="button"
-                    onClick={() => fileInputRef.current?.click()}
-                    className={`w-full px-4 py-2 text-left flex items-center gap-2.5 ${
+                    onClick={() => imageInputRef.current?.click()}
+                    className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 ${
                       isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
                     }`}
                   >
@@ -762,7 +848,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   <button
                     type="button"
                     onClick={() => videoInputRef.current?.click()}
-                    className={`w-full px-4 py-2 text-left flex items-center gap-2.5 ${
+                    className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 ${
                       isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
                     }`}
                   >
@@ -770,11 +856,22 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                     <span>Upload Video</span>
                   </button>
 
+                  <button
+                    type="button"
+                    onClick={() => documentInputRef.current?.click()}
+                    className={`w-full px-4 py-2.5 text-left flex items-center gap-2.5 ${
+                      isDark ? 'hover:bg-slate-700/60' : 'hover:bg-slate-100'
+                    }`}
+                  >
+                    <FileText className="w-4 h-4 text-amber-500" />
+                    <span>Upload File</span>
+                  </button>
+
                   <input
                     type="file"
-                    ref={fileInputRef}
+                    ref={imageInputRef}
                     onChange={(e) => handleFileUpload(e, 'image')}
-                    accept="image/*"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
                     className="hidden"
                   />
 
@@ -783,6 +880,14 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                     ref={videoInputRef}
                     onChange={handleVideoUpload}
                     accept="video/mp4,video/webm,video/quicktime"
+                    className="hidden"
+                  />
+
+                  <input
+                    type="file"
+                    ref={documentInputRef}
+                    onChange={(e) => handleFileUpload(e, 'document')}
+                    accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv,.zip,.rar,.rtf,.odt,.ods"
                     className="hidden"
                   />
                 </div>
@@ -794,6 +899,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               value={inputText}
               onChange={(e) => {
                 setInputText(e.target.value);
+
                 if (chat?.id) {
                   wsService.sendTyping(chat.id, Boolean(e.target.value.trim()));
                 }
