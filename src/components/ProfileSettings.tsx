@@ -13,7 +13,8 @@ import {
   Trash2,
   ShieldCheck,
   Smartphone,
-  Bell
+  Bell,
+  KeyRound
 } from 'lucide-react';
 
 import { User as ChatNovaUser } from '../types';
@@ -23,6 +24,7 @@ import { useTheme } from '../context/ThemeContext';
 import PrivacySettings from './PrivacySettings';
 import LinkedDevicesSettings from './LinkedDevicesSettings';
 import NotificationsSettings from './NotificationsSettings';
+import AccountPasswordSettings from './AccountPasswordSettings';
 
 interface ProfileSettingsProps {
   currentUser: ChatNovaUser;
@@ -40,6 +42,7 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
   const [showPrivacy, setShowPrivacy] = useState(false);
   const [showLinkedDevices, setShowLinkedDevices] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showAccountPassword, setShowAccountPassword] = useState(false);
 
   const [displayName, setDisplayName] = useState(
     currentUser.displayName || ''
@@ -331,6 +334,29 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
               </span>
             </button>
 
+            <button
+              type="button"
+              onClick={() => setShowAccountPassword(true)}
+              className={`w-full flex items-center gap-3 rounded-xl border p-4 text-left transition hover:border-emerald-500 ${
+                isDark
+                  ? 'border-slate-700 bg-[#202c33]'
+                  : 'border-slate-200 bg-slate-50'
+              }`}
+            >
+              <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                <KeyRound className="w-5 h-5 text-emerald-500" />
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-semibold">Account & Password</p>
+                <p className="text-xs text-slate-400 mt-1">
+                  Change password and secure your account
+                </p>
+              </div>
+              <span className="text-emerald-500 text-sm font-semibold">
+                Open
+              </span>
+            </button>
+
             <div className="flex flex-col items-center py-3">
               <div className="relative">
                 <div className="w-28 h-28 rounded-full overflow-hidden border-4 border-emerald-500/30 bg-emerald-600 flex items-center justify-center">
@@ -530,6 +556,12 @@ export const ProfileSettings: React.FC<ProfileSettingsProps> = ({
       {showNotifications && (
         <NotificationsSettings
           onClose={() => setShowNotifications(false)}
+        />
+      )}
+
+      {showAccountPassword && (
+        <AccountPasswordSettings
+          onClose={() => setShowAccountPassword(false)}
         />
       )}
     </>
