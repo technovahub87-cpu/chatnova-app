@@ -28,6 +28,14 @@ export interface MediaAttachment {
   duration?: number;
 }
 
+export interface MessageReply {
+  id: string;
+  senderName: string;
+  content: string;
+  type?: MessageType;
+  mediaUrl?: string;
+}
+
 export interface Message {
   id: string;
   chatId: string;
@@ -39,11 +47,12 @@ export interface Message {
   status: MessageStatus;
   voice?: VoiceData;
   media?: MediaAttachment;
-  replyTo?: {
-    id: string;
-    senderName: string;
-    content: string;
+  replyTo?: MessageReply;
+  forwardedFrom?: {
+    messageId?: string;
+    senderName?: string;
   };
+  deletedForEveryone?: boolean;
   reactions?: { [emoji: string]: string[] };
   isDisappearing?: boolean;
 }
