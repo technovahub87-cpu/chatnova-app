@@ -2,11 +2,13 @@
 import { wsService } from './websocket';
 
 type CallRole = 'caller' | 'callee';
+export type CallType = 'voice' | 'video';
 
 interface ActiveCall {
   callId: string;
   conversationId: string;
   role: CallRole;
+  type: CallType;
   peer: RTCPeerConnection | null;
   localStream: MediaStream | null;
   pendingCandidates: RTCIceCandidateInit[];
@@ -20,6 +22,8 @@ class WebRTCCallService {
   onIncomingCall: ((data: any) => void) | null = null;
   onCallStatus: ((status: string, data?: any) => void) | null = null;
   onCallError: ((message: string) => void) | null = null;
+  onLocalStream: ((stream: MediaStream | null) => void) | null = null;
+  onRemoteStream: ((stream: MediaStream | null) => void) | null = null;
 
   initialize(): void {
     if (this.initialized) return;
@@ -84,19 +88,42 @@ class WebRTCCallService {
     return `call_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
   }
 
-  private async getMicrophone(): Promise<MediaStream> {
+  private async getCallMedia(type: CallType): Promise<MediaStream> {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Microphone access is not supported by this browser.');
+      throw new Error('Camera and microphone are not supported by this browser.');
     }
 
-    return navigator.mediaDevices.getUserMedia({
-      audio: {
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true
-      },
-      video: false
-    });
+    try {
+      return await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        },
+        video: type === 'video'
+          ? {
+              facingMode: 'user',
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              frameRate: { ideal: 24, max: 30 }
+            }
+          : false
+      });
+    } catch (error: any) {
+      if (type === 'video') {
+        if (error?.name === 'NotAllowedError') {
+          throw new Error('Camera or microphone permission denied. Please allow both permissions.');
+        }
+
+        if (error?.name === 'NotFoundError') {
+          throw new Error('Camera or microphone not found on this device.');
+        }
+
+        throw new Error(error?.message || 'Unable to access camera and microphone.');
+      }
+
+      throw new Error(error?.message || 'Unable to access microphone.');
+    }
   }
 
   private createPeerConnection(): RTCPeerConnection {
@@ -120,18 +147,22 @@ class WebRTCCallService {
       const stream = event.streams[0];
       if (!stream) return;
 
-      if (!this.remoteAudio) {
-        this.remoteAudio = document.createElement('audio');
-        this.remoteAudio.autoplay = true;
-        this.remoteAudio.setAttribute('playsinline', 'true');
-        this.remoteAudio.style.display = 'none';
-        document.body.appendChild(this.remoteAudio);
-      }
+      this.onRemoteStream?.(stream);
 
-      this.remoteAudio.srcObject = stream;
-      this.remoteAudio.play().catch((error) => {
-        console.warn('[ChatNova Call] Audio playback needs user interaction:', error);
-      });
+      if (this.activeCall?.type === 'voice') {
+        if (!this.remoteAudio) {
+          this.remoteAudio = document.createElement('audio');
+          this.remoteAudio.autoplay = true;
+          this.remoteAudio.setAttribute('playsinline', 'true');
+          this.remoteAudio.style.display = 'none';
+          document.body.appendChild(this.remoteAudio);
+        }
+
+        this.remoteAudio.srcObject = stream;
+        this.remoteAudio.play().catch((error) => {
+          console.warn('[ChatNova Call] Audio playback needs user interaction:', error);
+        });
+      }
     };
 
     peer.onconnectionstatechange = () => {
@@ -155,7 +186,9 @@ class WebRTCCallService {
   private async prepareMedia(): Promise<void> {
     if (!this.activeCall) return;
 
-    const stream = await this.getMicrophone();
+    const type = this.activeCall.type;
+    const stream = await this.getCallMedia(type);
+
     if (!this.activeCall) {
       stream.getTracks().forEach((track) => track.stop());
       return;
@@ -169,9 +202,14 @@ class WebRTCCallService {
     stream.getTracks().forEach((track) => {
       peer.addTrack(track, stream);
     });
+
+    this.onLocalStream?.(stream);
   }
 
-  async startOutgoingCall(conversationId: string): Promise<void> {
+  async startOutgoingCall(
+    conversationId: string,
+    type: CallType = 'voice'
+  ): Promise<void> {
     if (!wsService.isConnected()) {
       throw new Error('ChatNova server is not connected. Please try again.');
     }
@@ -186,6 +224,7 @@ class WebRTCCallService {
       callId,
       conversationId,
       role: 'caller',
+      type,
       peer: null,
       localStream: null,
       pendingCandidates: []
@@ -195,11 +234,16 @@ class WebRTCCallService {
 
     wsService.emit('call:invite', {
       callId,
-      conversationId
+      conversationId,
+      type
     });
   }
 
-  async acceptIncomingCall(callId: string, conversationId: string): Promise<void> {
+  async acceptIncomingCall(
+    callId: string,
+    conversationId: string,
+    type: CallType = 'voice'
+  ): Promise<void> {
     if (!wsService.isConnected()) {
       throw new Error('ChatNova server is not connected.');
     }
@@ -212,6 +256,7 @@ class WebRTCCallService {
       callId,
       conversationId,
       role: 'callee',
+      type,
       peer: null,
       localStream: null,
       pendingCandidates: []
@@ -225,8 +270,8 @@ class WebRTCCallService {
       wsService.emit('call:accept', { callId });
       this.onCallStatus?.('connecting');
     } catch (error: any) {
-      this.activeCall = null;
-      throw new Error(error?.message || 'Could not access your microphone.');
+      this.cleanup();
+      throw new Error(error?.message || 'Could not access your camera or microphone.');
     }
   }
 
@@ -263,7 +308,7 @@ class WebRTCCallService {
         }
       });
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not start the voice connection.');
+      this.onCallError?.(error?.message || 'Could not start the call connection.');
       await this.endCall();
     }
   }
@@ -296,7 +341,7 @@ class WebRTCCallService {
         }
       });
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not answer the voice call.');
+      this.onCallError?.(error?.message || 'Could not answer the call.');
       await this.endCall();
     }
   }
@@ -318,7 +363,7 @@ class WebRTCCallService {
 
       await this.applyPendingCandidates();
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not connect the voice call.');
+      this.onCallError?.(error?.message || 'Could not connect the call.');
       await this.endCall();
     }
   }
@@ -359,6 +404,48 @@ class WebRTCCallService {
     }
   }
 
+  toggleMicrophone(): boolean {
+    const tracks = this.activeCall?.localStream?.getAudioTracks() || [];
+
+    if (!tracks.length) return false;
+
+    const nextEnabled = !tracks[0].enabled;
+    tracks.forEach((track) => {
+      track.enabled = nextEnabled;
+    });
+
+    return nextEnabled;
+  }
+
+  toggleCamera(): boolean {
+    const tracks = this.activeCall?.localStream?.getVideoTracks() || [];
+
+    if (!tracks.length) return false;
+
+    const nextEnabled = !tracks[0].enabled;
+    tracks.forEach((track) => {
+      track.enabled = nextEnabled;
+    });
+
+    return nextEnabled;
+  }
+
+  isCameraEnabled(): boolean {
+    return this.activeCall?.localStream
+      ?.getVideoTracks()
+      .some((track) => track.enabled) || false;
+  }
+
+  isMicrophoneEnabled(): boolean {
+    return this.activeCall?.localStream
+      ?.getAudioTracks()
+      .some((track) => track.enabled) || false;
+  }
+
+  getCallType(): CallType | null {
+    return this.activeCall?.type || null;
+  }
+
   private finishLocalCall(status: string, data?: any): void {
     if (
       data?.callId &&
@@ -382,6 +469,9 @@ class WebRTCCallService {
     this.activeCall?.localStream?.getTracks().forEach((track) => {
       track.stop();
     });
+
+    this.onLocalStream?.(null);
+    this.onRemoteStream?.(null);
 
     if (this.remoteAudio) {
       this.remoteAudio.pause();
