@@ -50,6 +50,14 @@ const {
   updateNotificationSettings
 } = require('../controllers/notificationController');
 
+const {
+  getStatuses,
+  createStatus,
+  markStatusViewed,
+  deleteStatus,
+  getStatusViewers
+} = require('../controllers/statusController');
+
 const { protect } = require('../middleware/protect');
 
 // Registration and login
@@ -88,6 +96,13 @@ router.get('/device-pairing/:pairingId/status', protect, getDevicePairingStatus)
 router.post('/device-pairing/:pairingId/approve', protect, approveDevicePairing);
 router.post('/device-pairing/:pairingId/reject', protect, rejectDevicePairing);
 router.post('/device-pairing/complete', completeDevicePairing);
+
+// Status
+router.get('/statuses', protect, getStatuses);
+router.post('/statuses', protect, createStatus);
+router.post('/statuses/:statusId/view', protect, markStatusViewed);
+router.get('/statuses/:statusId/viewers', protect, getStatusViewers);
+router.delete('/statuses/:statusId', protect, deleteStatus);
 
 // Profile photo
 router.get('/profile-image/:userId', getProfileImage);
