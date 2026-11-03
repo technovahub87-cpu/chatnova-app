@@ -1,4 +1,4 @@
-```typescript
+
 import { API_BASE_URL, getAuthToken } from './api';
 
 const getToken = () => {
@@ -18,12 +18,11 @@ const getApiUrl = (path: string) => {
     return path;
   }
 
-  // Audio URLs already containing /api must not get /api twice.
   if (path.startsWith('/api/')) {
-    return `${apiOrigin}${path}`;
+    return apiOrigin + path;
   }
 
-  return `${API_BASE_URL}${path.startsWith('/') ? '' : '/'}${path}`;
+  return API_BASE_URL + (path.startsWith('/') ? '' : '/') + path;
 };
 
 export const uploadVoiceMessage = async (
@@ -55,11 +54,11 @@ export const uploadVoiceMessage = async (
   const contentType = audioBlob.type.split(';')[0] || 'audio/webm';
 
   const response = await fetch(
-    getApiUrl(`/messages/${encodeURIComponent(conversationId)}/voice`),
+    getApiUrl('/messages/' + encodeURIComponent(conversationId) + '/voice'),
     {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${token}`,
+        Authorization: 'Bearer ' + token,
         'Content-Type': contentType,
         'X-Audio-Duration': String(Math.round(durationSeconds))
       },
@@ -90,7 +89,7 @@ export const fetchVoiceAudio = async (
   const response = await fetch(getApiUrl(audioUrl), {
     method: 'GET',
     headers: {
-      Authorization: `Bearer ${token}`
+      Authorization: 'Bearer ' + token
     },
     credentials: 'include',
     signal: AbortSignal.timeout(30000)
@@ -98,10 +97,9 @@ export const fetchVoiceAudio = async (
 
   if (!response.ok) {
     throw new Error(
-      `Unable to load voice message audio. Server error: ${response.status}`
+      'Unable to load voice message audio. Server error: ' + response.status
     );
   }
 
   return response.blob();
 };
-```
