@@ -10,6 +10,10 @@ const {
 } = require('../controllers/messageController');
 
 const {
+  messageAction
+} = require('../controllers/messageActionController');
+
+const {
   uploadVoiceMessage,
   streamVoiceMessage
 } = require('../controllers/voiceController');
@@ -31,10 +35,7 @@ router.get('/voice/:fileId', streamVoiceMessage);
 
 router.post(
   '/:conversationId/voice',
-  express.raw({
-    type: 'audio/*',
-    limit: '10mb'
-  }),
+  express.raw({ type: 'audio/*', limit: '10mb' }),
   uploadVoiceMessage
 );
 
@@ -43,27 +44,28 @@ router.get('/media/:fileId', streamMediaFile);
 
 router.post(
   '/:conversationId/video',
-  express.raw({
-    type: 'video/*',
-    limit: '50mb'
-  }),
+  express.raw({ type: 'video/*', limit: '50mb' }),
   uploadVideoMessage
 );
 
-// Image and document attachments
+// File and image attachments
 router.get('/attachment/:fileId', streamAttachment);
 
 router.post(
   '/:conversationId/attachment',
-  express.raw({
-    type: () => true,
-    limit: '25mb'
-  }),
+  express.raw({ type: () => true, limit: '25mb' }),
   uploadAttachment
 );
 
-// Normal chat messages
+// Reply, Forward and Delete actions
+router.post(
+  '/:conversationId/:messageId/action',
+  messageAction
+);
+
+// Fetch and send messages
 router.get('/:conversationId', getMessages);
+
 router.post('/:conversationId', sendMessage);
 
 module.exports = router;
