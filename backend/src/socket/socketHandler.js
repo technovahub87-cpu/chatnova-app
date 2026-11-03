@@ -546,6 +546,7 @@ module.exports = (io) => {
           await io.in(`user:${user.id}`).fetchSockets();
 
         if (remainingSockets.length > 0) return;
+        await setUserOffline(io, user.id);
 
         for (const [callId, call] of activeCalls.entries()) {
           if (
