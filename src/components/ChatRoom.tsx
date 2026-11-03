@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft, Send, Paperclip, Mic, Lock, CheckCheck,
   MoreVertical, Phone, Video, Info, FileText, Image as ImageIcon,
-  X, Square, Loader2, Film
+  X, Square, Loader2, Film, Smile
 } from 'lucide-react';
 
 import { Chat, Message, User } from '../types';
@@ -24,6 +24,19 @@ interface ChatRoomProps {
   onStartCall: (type: 'voice' | 'video') => void;
 }
 
+const EMOJIS = [
+  '😀','😃','😄','😁','😆','😅','😂','🤣',
+  '😊','😇','🙂','🙃','😉','😍','🥰','😘',
+  '😗','😋','😛','😜','🤪','😎','🤩','🥳',
+  '😏','😔','😢','😭','😡','🤬','🤔','🤗',
+  '🤫','🤭','🫡','🤝','🙏','👏','👍','👎',
+  '❤️','🧡','💛','💚','💙','💜','🖤','🤍',
+  '💔','💕','💞','💖','💗','💓','💯','🔥',
+  '✨','⭐','🌟','🎉','🎊','🎁','🎂','🏆',
+  '⚽','🏏','🎮','🎵','🎶','🚀','🌈','☀️',
+  '🌹','🌻','🌺','🍕','🍔','🍟','🍫','☕'
+];
+
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   chat, currentUser, messages, onSendMessage,
   onBack, onUpdateChat, onStartCall
@@ -34,6 +47,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
@@ -75,6 +89,10 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     };
   }, []);
 
+  const addEmoji = (emoji: string) => {
+    setInputText(previous => previous + emoji);
+  };
+
   const handleSend = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     const content = inputText.trim();
@@ -89,6 +107,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       })
     });
     setInputText('');
+    setShowEmojiPicker(false);
   };
 
   const handleFileUpload = (
@@ -588,7 +607,59 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
             <div className="relative">
               <button
                 type="button"
-                onClick={() => setShowAttachMenu(!showAttachMenu)}
+                onClick={() => {
+                  setShowEmojiPicker(!showEmojiPicker);
+                  setShowAttachMenu(false);
+                }}
+                title="Choose emoji"
+                className={`p-2.5 rounded-full hover:bg-slate-500/20 transition cursor-pointer ${
+                  showEmojiPicker ? 'text-emerald-500' : 'text-slate-400'
+                }`}
+              >
+                <Smile className="w-5 h-5" />
+              </button>
+
+              {showEmojiPicker && (
+                <div className={`absolute bottom-14 left-0 z-50 w-[280px] sm:w-[320px] rounded-2xl border shadow-2xl p-3 ${
+                  isDark
+                    ? 'bg-[#233138] border-slate-700 text-white'
+                    : 'bg-white border-slate-200 text-slate-900'
+                }`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs font-bold">Choose an Emoji</p>
+                    <button
+                      type="button"
+                      onClick={() => setShowEmojiPicker(false)}
+                      className="p-1 rounded-full hover:bg-slate-500/20"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-8 gap-1 max-h-48 overflow-y-auto">
+                    {EMOJIS.map((emoji, index) => (
+                      <button
+                        key={`${emoji}-${index}`}
+                        type="button"
+                        onClick={() => addEmoji(emoji)}
+                        className="h-8 w-8 rounded-lg text-xl hover:bg-emerald-500/20 transition flex items-center justify-center"
+                        title={emoji}
+                      >
+                        {emoji}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowAttachMenu(!showAttachMenu);
+                  setShowEmojiPicker(false);
+                }}
                 className="p-2.5 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
               >
                 <Paperclip className="w-5 h-5" />
