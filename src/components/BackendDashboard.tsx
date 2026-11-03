@@ -876,6 +876,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
               );
             }}
             onStartCall={handleCall}
+            availableChats={chats}
           />
         ) : (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
