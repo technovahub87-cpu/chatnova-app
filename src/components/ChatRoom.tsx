@@ -1278,7 +1278,6 @@ const handleForwardToChat = async (target: Chat) => {
                 Leave Group
               </button>
             )}
-
               <button
                 type="button"
                 onClick={() => setShowInfoModal(false)}
