@@ -1409,6 +1409,24 @@ const handleForwardToChat = async (target: Chat) => {
                 </span>
               </div>
             </div>
+            {!chat.isGroup && (
+  <button
+    type="button"
+    onClick={handleBlockToggle}
+    disabled={blockActionLoading}
+    className={`w-full py-2.5 mb-2 rounded-xl ${
+      blockedUserRecordId
+        ? 'bg-emerald-600 hover:bg-emerald-500'
+        : 'bg-rose-600 hover:bg-rose-500'
+    } text-white font-bold text-xs disabled:opacity-50`}
+  >
+    {blockActionLoading
+      ? 'Please wait...'
+      : blockedUserRecordId
+        ? 'Unblock User'
+        : 'Block User'}
+  </button>
+)}
                         {chat.isGroup && (
               <button
                 type="button"
