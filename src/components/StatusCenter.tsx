@@ -1,3 +1,4 @@
+
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   Camera,
@@ -7,7 +8,8 @@ import {
   Trash2,
   X,
   Image as ImageIcon,
-  Video
+  Video,
+  Plus
 } from 'lucide-react';
 import { User } from '../types';
 import { StatusRecord, statusAPI } from '../services/statusAPI';
@@ -16,14 +18,13 @@ interface StatusCenterProps {
   currentUser: User;
 }
 
-export const StatusCenter: React.FC<StatusCenterProps> = ({
-  currentUser
-}) => {
+export const StatusCenter: React.FC<StatusCenterProps> = ({ currentUser }) => {
   const [statuses, setStatuses] = useState<StatusRecord[]>([]);
   const [selectedStatus, setSelectedStatus] = useState<StatusRecord | null>(null);
   const [viewers, setViewers] = useState<StatusRecord['viewers']>([]);
   const [viewersOpen, setViewersOpen] = useState(false);
 
+  const [thumbnailUrls, setThumbnailUrls] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const [loadingViewers, setLoadingViewers] = useState(false);
@@ -59,6 +60,38 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
     loadStatuses();
   }, [loadStatuses]);
 
+  // Load protected image media for circular thumbnails.
+  useEffect(() => {
+    let cancelled = false;
+    const urls: Record<string, string> = {};
+
+    const loadThumbnails = async () => {
+      const imageStatuses = statuses.filter(status => status.type === 'image');
+
+      await Promise.all(
+        imageStatuses.map(async status => {
+          const response = await statusAPI.getStatusMedia(status._id);
+
+          if (response.success && response.blob && !cancelled) {
+            urls[status._id] = URL.createObjectURL(response.blob);
+            setThumbnailUrls(previous => ({
+              ...previous,
+              [status._id]: urls[status._id]
+            }));
+          }
+        })
+      );
+    };
+
+    loadThumbnails();
+
+    return () => {
+      cancelled = true;
+      Object.values(urls).forEach(url => URL.revokeObjectURL(url));
+    };
+  }, [statuses]);
+
+  // Load full media when a status is opened.
   useEffect(() => {
     let objectUrl = '';
 
@@ -116,7 +149,6 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-
     if (!file) return;
 
     setError('');
@@ -236,19 +268,52 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
   const otherStatuses = statuses.filter(status => !isMine(status));
 
   const statusLabel = (status: StatusRecord) => {
-    if (status.type === 'image') return '📷 Photo status';
-    if (status.type === 'video') return '🎥 Video status';
+    if (status.type === 'image') return 'Photo status';
+    if (status.type === 'video') return 'Video status';
     return status.text || 'Text status';
   };
 
+  const renderThumbnail = (status: StatusRecord) => (
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-full border-[3px] border-emerald-500 bg-gradient-to-br from-emerald-900 to-slate-800 flex items-center justify-center">
+      {status.type === 'image' && thumbnailUrls[status._id] ? (
+        <img
+          src={thumbnailUrls[status._id]}
+          alt="Status thumbnail"
+          className="h-full w-full object-cover"
+        />
+      ) : status.type === 'video' ? (
+        <Video className="h-6 w-6 text-white" />
+      ) : status.type === 'text' ? (
+        <span className="line-clamp-2 px-2 text-center text-[9px] text-white">
+          {status.text || 'Text'}
+        </span>
+      ) : (
+        <Camera className="h-6 w-6 text-white" />
+      )}
+
+      {status.type === 'video' && (
+        <span className="absolute bottom-0 right-0 rounded-full bg-black/80 p-1">
+          <Video className="h-3 w-3 text-white" />
+        </span>
+      )}
+    </div>
+  );
+
   return (
-    <div className="flex-1 overflow-y-auto p-4 space-y-5">
+    <div className="flex-1 overflow-y-auto bg-slate-950/20 p-4 space-y-5">
+
+      <div>
+        <h2 className="text-xl font-bold">Status</h2>
+        <p className="mt-1 text-xs text-slate-400">
+          Share photos, videos and moments with your contacts
+        </p>
+      </div>
 
       {/* Create text status */}
       <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/5 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <CircleDot className="w-5 h-5 text-emerald-500" />
-          <h3 className="font-bold text-sm">Create a text status</h3>
+        <div className="mb-3 flex items-center gap-2">
+          <CircleDot className="h-5 w-5 text-emerald-500" />
+          <h3 className="text-sm font-bold">Create a text status</h3>
         </div>
 
         <textarea
@@ -257,10 +322,10 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
           maxLength={700}
           rows={3}
           placeholder="What's on your mind?"
-          className="w-full rounded-xl border border-slate-500/20 bg-transparent p-3 text-sm outline-none focus:border-emerald-500 resize-none"
+          className="w-full resize-none rounded-xl border border-slate-500/20 bg-transparent p-3 text-sm outline-none focus:border-emerald-500"
         />
 
-        <div className="flex items-center justify-between mt-2">
+        <div className="mt-2 flex items-center justify-between">
           <span className="text-[10px] text-slate-400">
             {text.length}/700 · Expires after 24 hours
           </span>
@@ -276,11 +341,11 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
         </div>
       </div>
 
-      {/* Create photo/video status */}
+      {/* Add photo or video */}
       <div className="rounded-2xl border border-sky-500/20 bg-sky-500/5 p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Camera className="w-5 h-5 text-sky-500" />
-          <h3 className="font-bold text-sm">Add photo or video</h3>
+        <div className="mb-3 flex items-center gap-2">
+          <Camera className="h-5 w-5 text-sky-500" />
+          <h3 className="text-sm font-bold">Add photo or video</h3>
         </div>
 
         <label
@@ -315,8 +380,8 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
             <input
               type="text"
               value={caption}
-              onChange={event => setCaption(event.target.value.slice(0, 300))}
-              maxLength={300}
+              onChange={event => setCaption(event.target.value.slice(0, 200))}
+              maxLength={200}
               placeholder="Write a caption (optional)"
               className="w-full rounded-xl border border-slate-500/20 bg-transparent p-3 text-sm outline-none focus:border-sky-500"
             />
@@ -365,36 +430,59 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
       {/* Status lists */}
       {loading ? (
         <div className="flex items-center justify-center gap-2 p-8 text-sm text-slate-400">
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin" />
           Loading statuses...
         </div>
       ) : (
         <>
           <section>
-            <h3 className="mb-3 text-xs font-bold uppercase tracking-wider text-slate-400">
-              My Status
-            </h3>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                My Status
+              </h3>
+              <span className="text-[10px] text-slate-500">
+                {myStatuses.length} updates
+              </span>
+            </div>
 
             {myStatuses.length === 0 ? (
-              <p className="rounded-xl border border-dashed border-slate-500/30 p-4 text-center text-xs text-slate-400">
-                You haven't posted any status yet.
-              </p>
+              <div className="flex items-center gap-3 rounded-2xl border border-dashed border-slate-500/30 p-4">
+                <div className="relative flex h-14 w-14 items-center justify-center rounded-full border-2 border-dashed border-emerald-500 text-emerald-500">
+                  <Plus className="h-6 w-6" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold">My Status</p>
+                  <p className="text-xs text-slate-400">
+                    Tap Add photo or video to share an update
+                  </p>
+                </div>
+              </div>
             ) : (
               <div className="space-y-2">
                 {myStatuses.map(status => (
                   <div
                     key={status._id}
-                    className="flex items-center justify-between gap-3 rounded-xl border border-slate-500/20 p-3"
+                    className="flex items-center gap-3 rounded-2xl border border-slate-500/20 bg-slate-500/5 p-3"
                   >
+                    <button
+                      type="button"
+                      onClick={() => openStatus(status)}
+                      className="shrink-0"
+                      title="Open your status"
+                    >
+                      {renderThumbnail(status)}
+                    </button>
+
                     <button
                       type="button"
                       onClick={() => openStatus(status)}
                       className="min-w-0 flex-1 text-left"
                     >
-                      <p className="truncate text-sm font-medium">
+                      <p className="text-sm font-bold">My Status</p>
+                      <p className="truncate text-xs text-slate-400">
                         {statusLabel(status)}
                       </p>
-                      <p className="mt-1 text-[10px] text-slate-400">
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {formatTime(status.createdAt)}
                       </p>
                     </button>
@@ -439,19 +527,9 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
                     type="button"
                     key={status._id}
                     onClick={() => openStatus(status)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-slate-500/20 p-3 text-left hover:bg-slate-500/5"
+                    className="flex w-full items-center gap-3 rounded-2xl border border-slate-500/20 bg-slate-500/5 p-3 text-left hover:bg-slate-500/10"
                   >
-                    <div className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full border-2 border-emerald-500 bg-slate-500/10">
-                      {status.user?.avatar ? (
-                        <img
-                          src={status.user.avatar}
-                          alt=""
-                          className="h-full w-full object-cover"
-                        />
-                      ) : (
-                        <Camera className="h-5 w-5 text-emerald-500" />
-                      )}
-                    </div>
+                    {renderThumbnail(status)}
 
                     <div className="min-w-0 flex-1">
                       <p className="truncate text-sm font-bold">
@@ -460,7 +538,7 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
                       <p className="truncate text-xs text-slate-400">
                         {statusLabel(status)}
                       </p>
-                      <p className="mt-1 text-[10px] text-slate-400">
+                      <p className="mt-1 text-[10px] text-slate-500">
                         {formatTime(status.createdAt)}
                       </p>
                     </div>
@@ -472,9 +550,9 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
         </>
       )}
 
-      {/* Status viewer */}
+      {/* Full status viewer */}
       {selectedStatus && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/90 p-4">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/95 p-4">
           <div className="relative w-full max-w-md rounded-2xl bg-[#17212b] p-5 text-white">
             <button
               type="button"
@@ -485,7 +563,9 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
             </button>
 
             <p className="mb-1 pr-8 text-sm font-bold">
-              {selectedStatus.user?.displayName || 'Status'}
+              {isMine(selectedStatus)
+                ? 'My Status'
+                : selectedStatus.user?.displayName || 'Status'}
             </p>
 
             <p className="mb-4 text-[10px] text-slate-400">
@@ -532,20 +612,22 @@ export const StatusCenter: React.FC<StatusCenterProps> = ({
             )}
 
             {isMine(selectedStatus) && (
-              <button
-                type="button"
-                onClick={() => handleDelete(selectedStatus)}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 p-3 text-xs font-bold text-red-400"
-              >
-                <Trash2 className="h-4 w-4" />
-                Delete Status
-              </button>
+              <div className="mt-4 flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleDelete(selectedStatus)}
+                  className="flex w-full items-center justify-center gap-2 rounded-xl bg-red-500/10 p-3 text-xs font-bold text-red-400"
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Status
+                </button>
+              </div>
             )}
           </div>
         </div>
       )}
 
-      {/* Viewers modal */}
+      {/* Viewers */}
       {viewersOpen && (
         <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/80 p-4">
           <div className="w-full max-w-sm rounded-2xl bg-[#17212b] p-5 text-white">
