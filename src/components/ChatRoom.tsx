@@ -845,14 +845,17 @@ const handleForwardToChat = async (target: Chat) => {
 
                   <span>{msg.timestamp}</span>
 
-                  {isMe && (
-                    <span>
-                      <CheckCheck className={`w-3.5 h-3.5 ${
-                        msg.status === 'read' ? 'text-cyan-400' : ''
-                      }`} />
+                         {isMe && (
+                    <span className="inline-flex items-center">
+                      {msg.status === 'read' ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-cyan-400" />
+                      ) : msg.status === 'delivered' ? (
+                        <CheckCheck className="w-3.5 h-3.5 text-gray-400" />
+                      ) : (
+                        <Check className="w-3.5 h-3.5 text-gray-400" />
+                      )}
                     </span>
-                  )}
-                </div>
+                  )}                </div>
               </div>
             </div>
           );
