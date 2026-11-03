@@ -140,7 +140,7 @@ export const useBackendChat = (currentUser: User) => {
   }, [refreshChats]);
 
   useEffect(() => {
-    const unsubscribe = wsService.on(
+    const unsubscribeNewMessage = wsService.on(
       'chat:new_message',
       (eventData: any) => {
         if (!eventData) return;
@@ -182,7 +182,73 @@ export const useBackendChat = (currentUser: User) => {
       }
     );
 
-    return unsubscribe;
+    const unsubscribeMessageStatus = wsService.on(
+      'chat:message_status',
+      (eventData: any) => {
+        if (!eventData) return;
+
+        const conversationId = String(
+          eventData.conversationId || ''
+        );
+
+        const messageIds = Array.isArray(eventData.messageIds)
+          ? eventData.messageIds.map(String)
+          : [];
+
+        const status = eventData.status;
+
+        if (
+          !conversationId ||
+          messageIds.length === 0 ||
+          !['delivered', 'read'].includes(status)
+        ) {
+          return;
+        }
+
+        const messageIdSet = new Set(messageIds);
+
+        setMessagesMap((previous) => {
+          const existing = previous[conversationId] || [];
+
+          return {
+            ...previous,
+            [conversationId]: existing.map((message) =>
+              messageIdSet.has(String(message.id))
+                ? {
+                    ...message,
+                    status
+                  }
+                : message
+            )
+          };
+        });
+
+        setChats((previous) =>
+          previous.map((chat) => {
+            if (
+              chat.id !== conversationId ||
+              !chat.lastMessage ||
+              !messageIdSet.has(String(chat.lastMessage.id))
+            ) {
+              return chat;
+            }
+
+            return {
+              ...chat,
+              lastMessage: {
+                ...chat.lastMessage,
+                status
+              }
+            };
+          })
+        );
+      }
+    );
+
+    return () => {
+      unsubscribeNewMessage();
+      unsubscribeMessageStatus();
+    };
   }, [currentUser.id]);
 
   return {
