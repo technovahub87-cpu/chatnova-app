@@ -2,43 +2,92 @@
 const Status = require('../models/Status');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
+const PrivacySettings = require('../models/PrivacySettings');
+
+const getContactIds = async (userId) => {
+  const conversations = await Conversation.find({
+    type: 'direct',
+    participants: userId,
+    isActive: true
+  }).select('participants');
+
+  const contactIds = new Set([String(userId)]);
+
+  for (const conversation of conversations) {
+    for (const participantId of conversation.participants) {
+      contactIds.add(String(participantId));
+    }
+  }
+
+  return contactIds;
+};
+
+const canViewStatus = (status, ownerPrivacy, viewerId, contactIds) => {
+  const ownerId = String(status.user?._id || status.user);
+
+  if (ownerId === String(viewerId)) return true;
+
+  const globalVisibility = ownerPrivacy?.statusVisibility || 'contacts';
+  const statusAudience = status.audience || 'contacts';
+  const isContact = contactIds.has(ownerId);
+
+  if (globalVisibility === 'nobody' || statusAudience === 'nobody') {
+    return false;
+  }
+
+  if (
+    (globalVisibility === 'contacts' || statusAudience === 'contacts') &&
+    !isContact
+  ) {
+    return false;
+  }
+
+  return true;
+};
 
 const getStatuses = async (req, res) => {
   try {
     const currentUserId = req.user._id;
     const now = new Date();
 
-    const conversations = await Conversation.find({
-      type: 'direct',
-      participants: currentUserId,
-      isActive: true
-    }).select('participants');
-
-    const contactIds = new Set([String(currentUserId)]);
-
-    for (const conversation of conversations) {
-      for (const participantId of conversation.participants) {
-        contactIds.add(String(participantId));
-      }
-    }
+    const contactIds = await getContactIds(currentUserId);
 
     const possibleStatuses = await Status.find({
-      expiresAt: { $gt: now },
-      user: { $in: Array.from(contactIds) }
+      expiresAt: { $gt: now }
     })
       .populate('user', 'customId displayName avatar')
       .populate('viewers.user', 'customId displayName avatar')
       .sort({ createdAt: -1 });
 
-    const visibleStatuses = possibleStatuses.filter((status) => {
+    const ownerIds = [
+      ...new Set(
+        possibleStatuses.map(status =>
+          String(status.user?._id || status.user)
+        )
+      )
+    ];
+
+    const privacySettings = await PrivacySettings.find({
+      user: { $in: ownerIds }
+    }).select('user statusVisibility');
+
+    const privacyMap = new Map(
+      privacySettings.map(setting => [
+        String(setting.user),
+        setting
+      ])
+    );
+
+    const visibleStatuses = possibleStatuses.filter(status => {
       const ownerId = String(status.user?._id || status.user);
-      const isOwnStatus = ownerId === String(currentUserId);
+      const ownerPrivacy = privacyMap.get(ownerId);
 
-      if (isOwnStatus) return true;
-      if (status.audience === 'nobody') return false;
-      if (status.audience === 'everyone') return true;
-
-      return contactIds.has(ownerId);
+      return canViewStatus(
+        status,
+        ownerPrivacy,
+        currentUserId,
+        contactIds
+      );
     });
 
     return res.status(200).json({
@@ -67,7 +116,6 @@ const createStatus = async (req, res) => {
     }
 
     const text = String(req.body?.text || '').trim();
-    const audience = req.body?.audience || 'contacts';
     const type = req.body?.type || 'text';
 
     if (type !== 'text') {
@@ -84,12 +132,17 @@ const createStatus = async (req, res) => {
       });
     }
 
-    if (!['everyone', 'contacts', 'nobody'].includes(audience)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid status audience.'
+    let privacy = await PrivacySettings.findOne({
+      user: user._id
+    });
+
+    if (!privacy) {
+      privacy = await PrivacySettings.create({
+        user: user._id
       });
     }
+
+    const audience = privacy.statusVisibility || 'contacts';
 
     const status = await Status.create({
       user: user._id,
@@ -138,17 +191,20 @@ const markStatusViewed = async (req, res) => {
       });
     }
 
-    const conversations = await Conversation.find({
-      type: 'direct',
-      participants: { $all: [req.user._id, status.user] },
-      isActive: true
-    }).select('_id');
-
-    const isContact = conversations.length > 0;
+    const [ownerPrivacy, contactIds] = await Promise.all([
+      PrivacySettings.findOne({
+        user: status.user
+      }).select('statusVisibility'),
+      getContactIds(req.user._id)
+    ]);
 
     if (
-      status.audience === 'nobody' ||
-      (status.audience === 'contacts' && !isContact)
+      !canViewStatus(
+        status,
+        ownerPrivacy,
+        req.user._id,
+        contactIds
+      )
     ) {
       return res.status(403).json({
         success: false,
@@ -157,7 +213,7 @@ const markStatusViewed = async (req, res) => {
     }
 
     const alreadyViewed = status.viewers.some(
-      (viewer) => String(viewer.user) === String(req.user._id)
+      viewer => String(viewer.user) === String(req.user._id)
     );
 
     if (!alreadyViewed) {
