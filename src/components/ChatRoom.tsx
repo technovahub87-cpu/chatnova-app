@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft, Send, Paperclip, Mic, Lock, CheckCheck,
@@ -644,6 +643,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           const canCopy = msg.type === 'text' && Boolean(msg.content?.trim());
           const isCopied = copiedMessageId === messageKey;
 
+          // Custom Sticker Studio images are stored as protected attachments.
+          // GIPHY stickers are external HTTPS URLs and can load normally.
+          const isUploadedCustomSticker =
+            msg.type === 'sticker' &&
+            Boolean(msg.media?.url) &&
+            (
+              msg.media.url.includes('/attachment') ||
+              msg.media.name?.startsWith('chatnova-sticker-')
+            );
+
           return (
             <div
               key={msg.id || idx}
@@ -699,21 +708,35 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   <AttachmentMessage media={msg.media} type="file" />
                 )}
 
-                {(msg.type === 'gif' || msg.type === 'sticker') && msg.media?.url && (
-                  <div className={`overflow-hidden ${
-                    msg.type === 'sticker'
-                      ? 'w-36 h-36'
-                      : 'w-56 max-w-full'
-                  }`}>
+                {msg.type === 'gif' && msg.media?.url && (
+                  <div className="w-56 max-w-full overflow-hidden">
                     <img
                       src={msg.media.url}
-                      alt={msg.type === 'gif' ? 'GIF message' : 'Sticker message'}
-                      className={`w-full h-full object-contain ${
-                        msg.type === 'sticker' ? 'max-h-36' : 'rounded-lg'
-                      }`}
+                      alt="GIF message"
+                      className="w-full h-full object-contain rounded-lg"
                       loading="lazy"
                     />
                   </div>
+                )}
+
+                {msg.type === 'sticker' && msg.media?.url && (
+                  isUploadedCustomSticker ? (
+                    <div className="w-36 h-36 overflow-hidden">
+                      <AttachmentMessage
+                        media={msg.media}
+                        type="image"
+                      />
+                    </div>
+                  ) : (
+                    <div className="w-36 h-36 overflow-hidden">
+                      <img
+                        src={msg.media.url}
+                        alt="Sticker"
+                        className="w-full h-full object-contain max-h-36"
+                        loading="lazy"
+                      />
+                    </div>
+                  )
                 )}
 
                 {msg.type === 'voice' && (
