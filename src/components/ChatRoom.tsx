@@ -37,6 +37,14 @@ const EMOJIS = [
   '🌹','🌻','🌺','🍕','🍔','🍟','🍫','☕'
 ];
 
+// Detect messages containing only emoji characters.
+const isEmojiOnly = (value: string): boolean => {
+  const content = value.trim();
+  if (!content) return false;
+
+  return /^(?:\p{Extended_Pictographic}|\p{Regional_Indicator}|\uFE0F|\u200D|\u20E3|\s)+$/u.test(content);
+};
+
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   chat, currentUser, messages, onSendMessage,
   onBack, onUpdateChat, onStartCall
@@ -482,13 +490,19 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
         {messages.map((msg, idx) => {
           const isMe = msg.senderId === currentUser.id;
+          const emojiOnlyMessage =
+            msg.type === 'text' && isEmojiOnly(msg.content || '');
 
           return (
             <div
               key={msg.id || idx}
               className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}
             >
-              <div className={`max-w-[75%] sm:max-w-[65%] rounded-2xl px-3.5 py-2 shadow-sm relative text-xs sm:text-sm ${
+              <div className={`max-w-[75%] sm:max-w-[65%] rounded-2xl ${
+                emojiOnlyMessage ? 'px-2 py-1' : 'px-3.5 py-2'
+              } shadow-sm relative ${
+                emojiOnlyMessage ? '' : 'text-xs sm:text-sm'
+              } ${
                 isMe
                   ? isDark
                     ? 'bg-[#005c4b] text-white rounded-tr-none'
@@ -504,7 +518,13 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 )}
 
                 {msg.type === 'text' && (
-                  <p className="break-words leading-relaxed">{msg.content}</p>
+                  <p className={`break-words ${
+                    emojiOnlyMessage
+                      ? 'text-5xl sm:text-6xl leading-tight py-1'
+                      : 'leading-relaxed'
+                  }`}>
+                    {msg.content}
+                  </p>
                 )}
 
                 {msg.type === 'image' && msg.media && (
