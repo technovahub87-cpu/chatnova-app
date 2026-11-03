@@ -1092,7 +1092,135 @@ const handleForwardToChat = async (target: Chat) => {
           </form>
         )}
       </div>
+{forwardMessage && (
+  <div className="fixed inset-0 z-[70] bg-black/65 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4">
+    <div className={`w-full max-w-md max-h-[85vh] rounded-3xl border shadow-2xl overflow-hidden flex flex-col ${
+      isDark
+        ? 'bg-[#202c33] border-slate-700 text-white'
+        : 'bg-white border-slate-200 text-slate-900'
+    }`}>
+      <div className="px-5 py-4 border-b border-slate-500/20 flex items-center justify-between">
+        <div>
+          <h3 className="font-bold text-base">Forward message</h3>
+          <p className="text-xs text-slate-400 mt-1">
+            Select a chat or group
+          </p>
+        </div>
 
+        <button
+          type="button"
+          onClick={() => {
+            setForwardMessage(null);
+            setForwardSearch('');
+          }}
+          className="p-2 rounded-full hover:bg-slate-500/20"
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      <div className="p-4 border-b border-slate-500/20">
+        <input
+          type="search"
+          value={forwardSearch}
+          onChange={e => setForwardSearch(e.target.value)}
+          placeholder="Search chats and groups..."
+          className={`w-full rounded-xl px-4 py-3 text-sm outline-none border focus:ring-2 focus:ring-emerald-500 ${
+            isDark
+              ? 'bg-[#111b21] border-slate-700 text-white'
+              : 'bg-slate-50 border-slate-200 text-slate-900'
+          }`}
+        />
+      </div>
+
+      <div className="overflow-y-auto p-2">
+        {availableChats
+          .filter(item => item.id !== chat.id)
+          .filter(item => {
+            const title = item.isGroup
+              ? (item.groupName || 'Group')
+              : (item.participant?.displayName || 'ChatNova User');
+
+            const search = forwardSearch.trim().toLowerCase();
+
+            return (
+              title.toLowerCase().includes(search) ||
+              (item.participant?.customId || '').toLowerCase().includes(search)
+            );
+          })
+          .map(item => {
+            const title = item.isGroup
+              ? (item.groupName || 'Group')
+              : (item.participant?.displayName || 'ChatNova User');
+
+            const avatar = item.isGroup
+              ? item.groupIcon
+              : item.participant?.avatar;
+
+            return (
+              <button
+                type="button"
+                key={item.id}
+                disabled={isForwarding}
+                onClick={() => handleForwardToChat(item)}
+                className={`w-full flex items-center gap-3 p-3 rounded-2xl text-left transition ${
+                  isDark ? 'hover:bg-slate-700/70' : 'hover:bg-slate-100'
+                }`}
+              >
+                {avatar ? (
+                  <img
+                    src={avatar}
+                    alt=""
+                    className="w-11 h-11 rounded-full object-cover shrink-0"
+                  />
+                ) : (
+                  <div className="w-11 h-11 rounded-full bg-emerald-600 text-white flex items-center justify-center font-bold shrink-0">
+                    {title.charAt(0).toUpperCase()}
+                  </div>
+                )}
+
+                <span className="min-w-0 flex-1">
+                  <span className="block text-sm font-semibold truncate">
+                    {title}
+                  </span>
+                  <span className="block text-xs text-slate-400">
+                    {item.isGroup
+                      ? `${item.groupMembers?.length || 0} members · Group`
+                      : (item.participant?.customId || 'Personal chat')}
+                  </span>
+                </span>
+
+                {isForwarding ? (
+                  <Loader2 className="w-4 h-4 animate-spin text-emerald-500" />
+                ) : (
+                  <span className="text-xs text-emerald-500 font-semibold">
+                    Send
+                  </span>
+                )}
+              </button>
+            );
+          })}
+
+        {availableChats.filter(item =>
+          item.id !== chat.id &&
+          (
+            (item.isGroup ? (item.groupName || 'Group') : (item.participant?.displayName || 'ChatNova User'))
+              .toLowerCase().includes(forwardSearch.trim().toLowerCase()) ||
+            (item.participant?.customId || '').toLowerCase().includes(forwardSearch.trim().toLowerCase())
+          )
+        ).length === 0 && (
+          <p className="text-center text-sm text-slate-400 py-8">
+            No chats or groups found.
+          </p>
+        )}
+      </div>
+
+      <div className="px-5 py-3 border-t border-slate-500/20 text-xs text-slate-400">
+        Select the destination where you want to forward this message.
+      </div>
+    </div>
+  </div>
+)}
       {showInfoModal && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
           <div className={`w-full max-w-sm p-6 rounded-3xl border shadow-2xl ${
