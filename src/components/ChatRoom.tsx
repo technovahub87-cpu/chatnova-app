@@ -1266,18 +1266,7 @@ const handleForwardToChat = async (target: Chat) => {
                 <Lock className="w-5 h-5 text-emerald-500" />
                 Conversation Details
               </h3>
-                          {chat.isGroup && (
-              <button
-                type="button"
-                onClick={() => {
-                  setShowInfoModal(false);
-                  onLeaveGroup(chat.id);
-                }}
-                className="w-full py-2.5 mb-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
-              >
-                Leave Group
-              </button>
-            )}
+             
               <button
                 type="button"
                 onClick={() => setShowInfoModal(false)}
@@ -1338,6 +1327,18 @@ const handleForwardToChat = async (target: Chat) => {
                 </span>
               </div>
             </div>
+                        {chat.isGroup && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInfoModal(false);
+                  onLeaveGroup(chat.id);
+                }}
+                className="w-full py-2.5 mb-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+              >
+                Leave Group
+              </button>
+            )}
                         <button
               type="button"
               onClick={() => setShowInfoModal(false)}
