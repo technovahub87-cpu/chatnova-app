@@ -19,6 +19,7 @@ import { User, Chat, Message } from '../types';
 import { ChatRoom } from './ChatRoom';
 import { ProfileSettings } from './ProfileSettings';
 import { StatusCenter } from './StatusCenter';
+import { CallHistory } from './CallHistory';
 import { useBackendChat } from '../hooks/useBackendChat';
 import { createBackendDirectChat } from '../services/chatBackend';
 import {
@@ -224,6 +225,22 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
       type,
       conversationId: activeChatId
+    });
+  };
+
+  const handleHistoryCall = (
+    type: 'voice' | 'video',
+    conversationId: string
+  ) => {
+    if (!conversationId) {
+      window.alert('This conversation is no longer available.');
+      return;
+    }
+
+    setCallRequest({
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+      type,
+      conversationId
     });
   };
 
@@ -610,17 +627,10 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
 
         {/* CALLS TAB */}
         {activeTab === 'calls' && (
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="flex flex-col items-center justify-center text-center py-12">
-              <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
-                <Phone className="w-8 h-8 text-emerald-500" />
-              </div>
-              <h2 className="text-lg font-bold">Calls</h2>
-              <p className="text-sm text-slate-400 mt-2">
-                Your call history will appear here when calling is implemented.
-              </p>
-            </div>
-          </div>
+          <CallHistory
+            isDark={isDark}
+            onCall={handleHistoryCall}
+          />
         )}
 
         {/* SETTINGS TAB */}
