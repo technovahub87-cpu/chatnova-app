@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft, Send, Paperclip, Mic, Lock, CheckCheck,
   MoreVertical, Phone, Video, Info, FileText, Image as ImageIcon,
-  X, Square, Loader2, Film, Smile, Copy, Check, Download
+  X, Square, Loader2, Film, Smile, Copy, Check
 } from 'lucide-react';
 
 import { Chat, Message, User } from '../types';
@@ -15,6 +15,8 @@ import { uploadVideoMessage } from '../services/videoMessages';
 import { VideoMessagePlayer } from './VideoMessagePlayer';
 import { uploadAttachment } from '../services/attachmentMessages';
 import { AttachmentMessage } from './AttachmentMessage';
+import { GifStickerPicker } from './GifStickerPicker';
+import { sendGifStickerMessage } from '../services/gifStickerMessages';
 
 interface ChatRoomProps {
   chat: Chat;
@@ -72,6 +74,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [showGifStickerPicker, setShowGifStickerPicker] = useState(false);
+  const [isSendingGifSticker, setIsSendingGifSticker] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
@@ -118,7 +122,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
     };
   }, []);
 
-  // Copy message text to the device clipboard.
   const handleCopyMessage = async (messageId: string, content: string) => {
     if (!content?.trim()) return;
 
@@ -175,9 +178,31 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
 
     setInputText('');
     setShowEmojiPicker(false);
+    setShowGifStickerPicker(false);
   };
 
-  // Upload image or document attachment.
+  const handleGifStickerSelect = async (
+    url: string,
+    type: 'gif' | 'sticker'
+  ) => {
+    if (isSendingGifSticker) return;
+
+    setIsSendingGifSticker(true);
+
+    try {
+      await sendGifStickerMessage(chat.id, url, type);
+      setShowGifStickerPicker(false);
+    } catch (error) {
+      window.alert(
+        error instanceof Error
+          ? error.message
+          : 'GIF or sticker could not be sent.'
+      );
+    } finally {
+      setIsSendingGifSticker(false);
+    }
+  };
+
   const handleFileUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
     type: 'image' | 'document'
@@ -310,7 +335,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       isRecording ||
       isUploadingVoice ||
       isUploadingVideo ||
-      isUploadingAttachment
+      isUploadingAttachment ||
+      isSendingGifSticker
     ) return;
 
     try {
@@ -653,10 +679,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 )}
 
                 {msg.type === 'image' && msg.media && (
-                  <AttachmentMessage
-                    media={msg.media}
-                    type="image"
-                  />
+                  <AttachmentMessage media={msg.media} type="image" />
                 )}
 
                 {msg.type === 'video' && msg.media && (
@@ -665,7 +688,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                       videoUrl={msg.media.url}
                       name={msg.media.name}
                     />
-
                     <p className="text-[10px] opacity-80 flex items-center gap-1">
                       <Film className="w-3 h-3" />
                       {msg.media.name}
@@ -674,10 +696,24 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 )}
 
                 {(msg.type === 'file' || msg.type === 'document') && msg.media && (
-                  <AttachmentMessage
-                    media={msg.media}
-                    type="file"
-                  />
+                  <AttachmentMessage media={msg.media} type="file" />
+                )}
+
+                {(msg.type === 'gif' || msg.type === 'sticker') && msg.media?.url && (
+                  <div className={`overflow-hidden ${
+                    msg.type === 'sticker'
+                      ? 'w-36 h-36'
+                      : 'w-56 max-w-full'
+                  }`}>
+                    <img
+                      src={msg.media.url}
+                      alt={msg.type === 'gif' ? 'GIF message' : 'Sticker message'}
+                      className={`w-full h-full object-contain ${
+                        msg.type === 'sticker' ? 'max-h-36' : 'rounded-lg'
+                      }`}
+                      loading="lazy"
+                    />
+                  </div>
                 )}
 
                 {msg.type === 'voice' && (
@@ -754,14 +790,16 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               Send
             </button>
           </div>
-        ) : isUploadingVoice || isUploadingVideo || isUploadingAttachment ? (
+        ) : isUploadingVoice || isUploadingVideo || isUploadingAttachment || isSendingGifSticker ? (
           <div className="flex items-center justify-center gap-2 py-3 text-emerald-500 text-sm">
             <Loader2 className="w-4 h-4 animate-spin" />
             {isUploadingVoice
               ? 'Sending voice message...'
               : isUploadingVideo
                 ? 'Uploading video...'
-                : 'Uploading attachment...'}
+                : isUploadingAttachment
+                  ? 'Uploading attachment...'
+                  : 'Sending GIF or sticker...'}
           </div>
         ) : (
           <form onSubmit={handleSend} className="flex items-center gap-2 relative">
@@ -770,6 +808,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 type="button"
                 onClick={() => {
                   setShowEmojiPicker(!showEmojiPicker);
+                  setShowGifStickerPicker(false);
                   setShowAttachMenu(false);
                 }}
                 title="Choose emoji"
@@ -788,7 +827,6 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                 }`}>
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-xs font-bold">Choose an Emoji</p>
-
                     <button
                       type="button"
                       onClick={() => setShowEmojiPicker(false)}
@@ -815,12 +853,40 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
               )}
             </div>
 
+            <button
+              type="button"
+              onClick={() => {
+                setShowGifStickerPicker(!showGifStickerPicker);
+                setShowEmojiPicker(false);
+                setShowAttachMenu(false);
+              }}
+              title="GIFs and Stickers"
+              className={`p-2.5 rounded-full hover:bg-slate-500/20 transition cursor-pointer ${
+                showGifStickerPicker ? 'text-emerald-500' : 'text-slate-400'
+              }`}
+            >
+              <span className="text-[10px] font-black border border-current rounded px-1.5 py-1">
+                GIF
+              </span>
+            </button>
+
+            {showGifStickerPicker && (
+              <div className="absolute bottom-16 left-0 z-50">
+                <GifStickerPicker
+                  isDark={isDark}
+                  onClose={() => setShowGifStickerPicker(false)}
+                  onSelect={handleGifStickerSelect}
+                />
+              </div>
+            )}
+
             <div className="relative">
               <button
                 type="button"
                 onClick={() => {
                   setShowAttachMenu(!showAttachMenu);
                   setShowEmojiPicker(false);
+                  setShowGifStickerPicker(false);
                 }}
                 title="Attach"
                 className="p-2.5 rounded-full hover:bg-slate-500/20 text-slate-400 hover:text-emerald-500 transition cursor-pointer"
