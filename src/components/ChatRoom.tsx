@@ -26,6 +26,7 @@ interface ChatRoomProps {
   onBack: () => void;
   onUpdateChat: (updatedChat: Chat) => void;
   onStartCall: (type: 'voice' | 'video') => void;
+    onLeaveGroup: (conversationId: string) => void;
   availableChats?: Chat[];
 }
 
@@ -66,7 +67,7 @@ const isEmojiOnly = (value: string): boolean => {
 
 export const ChatRoom: React.FC<ChatRoomProps> = ({
   chat, currentUser, messages, onSendMessage,
-  onBack, onUpdateChat, onStartCall, availableChats = []
+   onBack, onUpdateChat, onStartCall, onLeaveGroup, availableChats = []
 }) => {
   const { isDark } = useTheme();
 
@@ -1265,6 +1266,18 @@ const handleForwardToChat = async (target: Chat) => {
                 <Lock className="w-5 h-5 text-emerald-500" />
                 Conversation Details
               </h3>
+                          {chat.isGroup && (
+              <button
+                type="button"
+                onClick={() => {
+                  setShowInfoModal(false);
+                  onLeaveGroup(chat.id);
+                }}
+                className="w-full py-2.5 mb-2 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs"
+              >
+                Leave Group
+              </button>
+            )}
 
               <button
                 type="button"
