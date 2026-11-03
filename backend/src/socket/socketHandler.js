@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const User = require('../models/User');
 const Conversation = require('../models/Conversation');
 const Call = require('../models/Call');
-
+const { setUserOnline, setUserOffline } = require('../services/presenceService');
 const onlineUsers = new Map();
 const activeCalls = new Map();
 
