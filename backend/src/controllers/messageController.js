@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
@@ -32,7 +31,10 @@ const getMessages = async (req, res) => {
     }
 
     const filter = {
-      chatId: String(conversation._id)
+      chatId: String(conversation._id),
+
+      // Messages deleted only by this user will not appear again.
+      deletedFor: { $ne: req.user._id }
     };
 
     if (req.query.before) {
