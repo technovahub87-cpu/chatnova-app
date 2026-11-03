@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 
 const PrivacySettingsSchema = new mongoose.Schema(
@@ -32,6 +33,12 @@ const PrivacySettingsSchema = new mongoose.Schema(
       type: String,
       enum: ['everyone', 'contacts', 'nobody'],
       default: 'everyone'
+    },
+
+    statusVisibility: {
+      type: String,
+      enum: ['everyone', 'contacts', 'nobody'],
+      default: 'contacts'
     },
 
     readReceipts: {
