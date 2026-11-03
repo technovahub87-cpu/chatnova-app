@@ -18,6 +18,7 @@ const adminRoutes = require('./routes/adminRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
 const callRoutes = require('./routes/callRoutes');
+const blockedUserRoutes = require('./routes/blockedUserRoutes');
 
 const initSocket = require('./socket/socketHandler');
 
@@ -191,6 +192,7 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
 app.use('/api/calls', callRoutes);
+app.use('/api/blocked-users', blockedUserRoutes);
 
 app.use((req, res) => {
   return res.status(404).json({
