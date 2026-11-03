@@ -53,10 +53,19 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       setCurrentType(data.type === 'video' ? 'video' : 'voice');
       setCallStatus('incoming');
       setError('');
+      setBusy(false);
     };
 
     webrtcCallService.onCallStatus = (status) => {
       setCallStatus(status);
+
+      if (
+        status === 'connected' ||
+        status === 'ringing' ||
+        status === 'connection-lost'
+      ) {
+        setBusy(false);
+      }
 
       if (
         status === 'ended' ||
@@ -155,6 +164,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
 
       setIncomingCall(null);
       setCallStatus('connecting');
+      setBusy(false);
     } catch (err: any) {
       setError(err?.message || 'Could not accept the call.');
       setBusy(false);
@@ -171,13 +181,19 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   };
 
   const endCall = async () => {
+    if (!webrtcCallService.isInCall()) return;
+
     setBusy(true);
-    await webrtcCallService.endCall();
-    setIncomingCall(null);
-    setLocalStream(null);
-    setRemoteStream(null);
-    setCallStatus('ended');
-    setBusy(false);
+
+    try {
+      await webrtcCallService.endCall();
+    } finally {
+      setIncomingCall(null);
+      setLocalStream(null);
+      setRemoteStream(null);
+      setCallStatus('ended');
+      setBusy(false);
+    }
   };
 
   const toggleMic = () => {
@@ -398,8 +414,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             <button
               type="button"
               onClick={endCall}
-              disabled={busy}
-              className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 flex items-center justify-center disabled:opacity-50"
+              className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 active:scale-95 flex items-center justify-center cursor-pointer"
               title="End call"
             >
               <PhoneOff className="w-6 h-6" />
