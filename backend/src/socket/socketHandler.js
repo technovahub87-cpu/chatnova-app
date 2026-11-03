@@ -138,12 +138,10 @@ module.exports = (io) => {
         }
 
         const conversation = await Conversation.findOne({
-          _id: conversationId,
-          participants: user.id,
-          isActive: true
-        }).select('_id');
-
-        }).select('_id type participants');
+  _id: conversationId,
+  participants: user.id,
+  isActive: true
+}).select('_id type participants');
 
 if (!conversation) {
   return socket.emit('socket:error', {
