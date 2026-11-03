@@ -1259,10 +1259,30 @@ const handleForwardToChat = async (target: Chat) => {
 
               <h4 className="font-bold text-base">{chatTitle}</h4>
 
-              <p className="text-xs font-mono text-emerald-500 mt-0.5">
-                {chat.isGroup ? 'Group Conversation' : chat.participant?.customId}
-              </p>
-            </div>
+              <div className="flex items-center gap-2 text-xs mt-0.5">
+  {chat.isGroup ? (
+    <span className="font-mono text-emerald-500">
+      Group Conversation
+    </span>
+  ) : (
+    <>
+      <span className="font-mono text-emerald-500">
+        {chat.participant?.customId}
+      </span>
+
+      {chat.participant?.status === 'online' ? (
+        <span className="inline-flex items-center gap-1 text-emerald-500">
+          <span className="w-2 h-2 rounded-full bg-emerald-500" />
+          Online
+        </span>
+      ) : (
+        <span className="text-gray-400">
+          Last seen: {chat.participant?.lastSeen || 'Recently'}
+        </span>
+      )}
+    </>
+  )}
+</div>
 
             <div className={`p-3 rounded-2xl border text-xs space-y-2 mb-4 ${
               isDark
