@@ -283,10 +283,68 @@ const getConversationById = async (req, res) => {
     });
   }
 };
+const leaveGroupConversation = async (req, res) => {
+  try {
+    const { conversationId } = req.params;
 
+    if (!mongoose.Types.ObjectId.isValid(conversationId)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid group ID.'
+      });
+    }
+
+    const conversation = await Conversation.findOne({
+      _id: conversationId,
+      type: 'group',
+      participants: req.user._id,
+      isActive: true
+    });
+
+    if (!conversation) {
+      return res.status(404).json({
+        success: false,
+        message: 'Group not found or you are not a member.'
+      });
+    }
+
+    const userId = String(req.user._id);
+
+    conversation.participants = conversation.participants.filter(
+      (id) => String(id) !== userId
+    );
+
+    conversation.admins = conversation.admins.filter(
+      (id) => String(id) !== userId
+    );
+
+    if (conversation.admins.length === 0 && conversation.participants.length > 0) {
+      conversation.admins = [conversation.participants[0]];
+    }
+
+    if (conversation.participants.length === 0) {
+      conversation.isActive = false;
+    }
+
+    await conversation.save();
+
+    return res.status(200).json({
+      success: true,
+      message: 'You have left the group successfully.'
+    });
+
+  } catch (error) {
+    console.error('[Leave Group]:', error.message);
+    return res.status(500).json({
+      success: false,
+      message: 'Unable to leave the group.'
+    });
+  }
+};
 module.exports = {
   createDirectConversation,
   createGroupConversation,
   getMyConversations,
-  getConversationById
+  getConversationById,
+  leaveGroupConversation
 };
