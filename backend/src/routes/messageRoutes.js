@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 
@@ -18,12 +19,16 @@ const {
   streamMediaFile
 } = require('../controllers/mediaController');
 
+const {
+  uploadAttachment,
+  streamAttachment
+} = require('../controllers/attachmentController');
+
 router.use(protect);
 
-// Voice message playback
+// Voice messages
 router.get('/voice/:fileId', streamVoiceMessage);
 
-// Voice message upload
 router.post(
   '/:conversationId/voice',
   express.raw({
@@ -33,10 +38,9 @@ router.post(
   uploadVoiceMessage
 );
 
-// Video message playback
+// Video messages
 router.get('/media/:fileId', streamMediaFile);
 
-// Video message upload
 router.post(
   '/:conversationId/video',
   express.raw({
@@ -44,6 +48,18 @@ router.post(
     limit: '50mb'
   }),
   uploadVideoMessage
+);
+
+// Image and document attachments
+router.get('/attachment/:fileId', streamAttachment);
+
+router.post(
+  '/:conversationId/attachment',
+  express.raw({
+    type: () => true,
+    limit: '25mb'
+  }),
+  uploadAttachment
 );
 
 // Normal chat messages
