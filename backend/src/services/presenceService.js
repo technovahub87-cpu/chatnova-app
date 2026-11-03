@@ -8,17 +8,32 @@ const getConnectedPeers = async (userId) => {
   const conversations = await Conversation.find({
     participants: userId,
     isActive: true
-  }).select('participants').lean();
+  }).select('participants type').lean();
 
-  return [
-    ...new Set(
-      conversations.flatMap((conversation) =>
-        conversation.participants
-          .map((id) => String(id))
-          .filter((id) => id !== String(userId))
-      )
-    )
-  ];
+  const allPeers = new Set();
+  const directPeers = new Set();
+
+  for (const conversation of conversations) {
+    for (const participantId of conversation.participants) {
+      const peerId = String(participantId);
+
+      if (peerId === String(userId)) continue;
+
+      allPeers.add(peerId);
+
+      if (conversation.type === 'direct') {
+        directPeers.add(peerId);
+      }
+    }
+  }
+
+  return { allPeers, directPeers };
+};
+
+const canView = (visibility, isContact) => {
+  if (visibility === 'nobody') return false;
+  if (visibility === 'contacts') return isContact;
+  return true;
 };
 
 const notifyPresence = async (io, userId, status, lastSeen) => {
@@ -26,23 +41,30 @@ const notifyPresence = async (io, userId, status, lastSeen) => {
     user: userId
   }).lean();
 
-  const peers = await getConnectedPeers(userId);
+  const { allPeers, directPeers } = await getConnectedPeers(userId);
 
-  const payload = { userId: String(userId) };
+  for (const peerId of allPeers) {
+    const isContact = directPeers.has(peerId);
+    const payload = { userId: String(userId) };
 
-  if (settings?.onlineStatusVisibility !== 'nobody') {
-    payload.status = status;
-  }
+    const onlineVisibility =
+      settings?.onlineStatusVisibility || 'everyone';
 
-  if (
-    status === 'offline' &&
-    settings?.lastSeenVisibility !== 'nobody'
-  ) {
-    payload.lastSeen = lastSeen;
-  }
+    const lastSeenVisibility =
+      settings?.lastSeenVisibility || 'everyone';
 
-  if (Object.keys(payload).length > 1) {
-    for (const peerId of peers) {
+    if (canView(onlineVisibility, isContact)) {
+      payload.status = status;
+    }
+
+    if (
+      status === 'offline' &&
+      canView(lastSeenVisibility, isContact)
+    ) {
+      payload.lastSeen = lastSeen;
+    }
+
+    if (Object.keys(payload).length > 1) {
       io.to(`user:${peerId}`).emit('presence:update', payload);
     }
   }
@@ -57,7 +79,6 @@ const deliverPendingMessages = async (io, userId) => {
   if (pendingMessages.length === 0) return;
 
   const messageIds = pendingMessages.map((message) => message._id);
-
   const deliveredAt = new Date();
 
   await Message.updateMany(
