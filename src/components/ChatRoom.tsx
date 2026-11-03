@@ -83,6 +83,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
   const [isUploadingAttachment, setIsUploadingAttachment] = useState(false);
   const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
+  const [forwardMessage, setForwardMessage] = useState<Message | null>(null);
+const [forwardSearch, setForwardSearch] = useState('');
+const [isForwarding, setIsForwarding] = useState(false);
 
   const recordingTimerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -508,17 +511,15 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
         return;
       }
       if (action === 'forward') {
-        const targets = availableChats.filter(item => item.id !== chat.id);
-        if (!targets.length) { window.alert('Forward karne ke liye koi doosri chat available nahi hai.'); return; }
-        const choices = targets.map((item, index) => `${index + 1}. ${item.isGroup ? item.groupName || 'Group' : item.participant?.displayName || 'ChatNova User'}`).join('\\n');
-        const answer = window.prompt(`Kis chat mein forward karna hai? Number likhein:\\n\\n${choices}`);
-        if (!answer) return;
-        const selectedIndex = Number(answer) - 1;
-        if (!Number.isInteger(selectedIndex) || selectedIndex < 0 || selectedIndex >= targets.length) { window.alert('Galat chat number select hua hai.'); return; }
-        await performMessageAction(chat.id, messageId, { action: 'forward', targetConversationId: targets[selectedIndex].id });
-        window.alert('Message forward ho gaya.');
-        return;
-      }
+  if (!availableChats.some(item => item.id !== chat.id)) {
+    window.alert('Forward karne ke liye koi doosri chat available nahi hai.');
+    return;
+  }
+
+  setForwardSearch('');
+  setForwardMessage(msg);
+  return;
+}
       if (action === 'delete_for_me') {
         if (!window.confirm('Kya aap is message ko sirf apni chat se delete karna chahte hain?')) return;
       } else if (!window.confirm('Kya aap is message ko sabhi ke liye delete karna chahte hain?')) return;
@@ -527,7 +528,38 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       window.alert(error instanceof Error ? error.message : 'Message action complete nahi ho paya.');
     }
   };
+const handleForwardToChat = async (target: Chat) => {
+  if (!forwardMessage || isForwarding) return;
 
+  const messageId = String(forwardMessage.id || '');
+
+  if (!messageId) {
+    window.alert('Message ID nahi mila. Please refresh karein.');
+    return;
+  }
+
+  setIsForwarding(true);
+
+  try {
+    await performMessageAction(chat.id, messageId, {
+      action: 'forward',
+      targetConversationId: target.id
+    });
+
+    setForwardMessage(null);
+    setForwardSearch('');
+
+    window.alert('Message successfully forward ho gaya.');
+  } catch (error) {
+    window.alert(
+      error instanceof Error
+        ? error.message
+        : 'Message forward nahi ho paya.'
+    );
+  } finally {
+    setIsForwarding(false);
+  }
+};
   const formatTime = (seconds: number) => {
     const minutes = Math.floor(seconds / 60);
     const remaining = seconds % 60;
