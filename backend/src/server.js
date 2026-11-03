@@ -17,6 +17,8 @@ const authRoutes = require('./routes/authRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 const conversationRoutes = require('./routes/conversationRoutes');
 const messageRoutes = require('./routes/messageRoutes');
+const callRoutes = require('./routes/callRoutes');
+
 const initSocket = require('./socket/socketHandler');
 
 const app = express();
@@ -99,8 +101,6 @@ mongoose.connection.on('connected', () => {
   bootstrapMasterAdmin();
 });
 
-// Check periodically so an account registered after deployment
-// can also be promoted after completing authentication setup.
 const masterBootstrapInterval = setInterval(() => {
   bootstrapMasterAdmin();
 }, 15000);
@@ -190,6 +190,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/conversations', conversationRoutes);
 app.use('/api/messages', messageRoutes);
+app.use('/api/calls', callRoutes);
 
 app.use((req, res) => {
   return res.status(404).json({
@@ -224,6 +225,7 @@ server.listen(PORT, () => {
   console.log('REST API: Active');
   console.log('Conversation API: Active');
   console.log('Message API: Active');
+  console.log('Call History API: Active');
   console.log('Socket.IO: Active');
   console.log('==========================================');
 });
