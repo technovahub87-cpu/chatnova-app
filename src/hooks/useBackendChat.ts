@@ -245,9 +245,41 @@ export const useBackendChat = (currentUser: User) => {
       }
     );
 
+    const unsubscribePresence = wsService.on(
+      'presence:update',
+      (eventData: any) => {
+        if (!eventData?.userId) return;
+
+        const userId = String(eventData.userId);
+
+        const updateUser = (user: User): User => {
+          if (String(user.id) !== userId) return user;
+
+          return {
+            ...user,
+            ...(eventData.status
+              ? { status: eventData.status }
+              : {}),
+            ...(eventData.lastSeen
+              ? { lastSeen: eventData.lastSeen }
+              : {})
+          };
+        };
+
+        setChats((previous) =>
+          previous.map((chat) => ({
+            ...chat,
+            participant: updateUser(chat.participant),
+            groupMembers: chat.groupMembers?.map(updateUser)
+          }))
+        );
+      }
+    );
+
     return () => {
       unsubscribeNewMessage();
       unsubscribeMessageStatus();
+      unsubscribePresence();
     };
   }, [currentUser.id]);
 
