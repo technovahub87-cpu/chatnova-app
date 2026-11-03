@@ -9,13 +9,16 @@ import {
   ShieldAlert,
   Users,
   AlertCircle,
-  UserCircle,
-  Settings
+  Settings,
+  CircleDot,
+  Phone,
+  UserCircle
 } from 'lucide-react';
 
 import { User, Chat, Message } from '../types';
 import { ChatRoom } from './ChatRoom';
 import { ProfileSettings } from './ProfileSettings';
+import { StatusCenter } from './StatusCenter';
 import { useBackendChat } from '../hooks/useBackendChat';
 import { createBackendDirectChat } from '../services/chatBackend';
 import {
@@ -38,6 +41,8 @@ interface AvatarImageProps {
   className: string;
   fallbackClassName: string;
 }
+
+type MainTab = 'chats' | 'status' | 'calls' | 'settings';
 
 const AvatarImage: React.FC<AvatarImageProps> = ({
   avatar,
@@ -90,6 +95,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
     sendText
   } = useBackendChat(currentUser);
 
+  const [activeTab, setActiveTab] = useState<MainTab>('chats');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [newCustomId, setNewCustomId] = useState('');
@@ -111,6 +117,17 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       refreshMessages(activeChatId);
     }
   }, [activeChatId, refreshMessages]);
+
+  const changeTab = (tab: MainTab) => {
+    setActiveTab(tab);
+    setActiveChatId(null);
+    setShowNewChat(false);
+    setLocalError('');
+
+    if (tab === 'settings') {
+      setShowProfile(true);
+    }
+  };
 
   const handleCreateChat = async (event: React.FormEvent) => {
     event.preventDefault();
@@ -143,8 +160,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       }
 
       const payload: any = result.data;
-      const rawConversation =
-        payload.conversation || payload;
+      const rawConversation = payload.conversation || payload;
 
       const newChat = mapBackendConversation(
         rawConversation,
@@ -163,6 +179,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           : [newChat, ...previous];
       });
 
+      setActiveTab('chats');
       setActiveChatId(newChat.id);
       setNewCustomId('');
       setShowNewChat(false);
@@ -206,7 +223,6 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       : chat.participant?.customId || '';
 
     const lastMessage = chat.lastMessage?.content || '';
-
     const query = searchQuery.toLowerCase();
 
     return (
@@ -215,6 +231,15 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       lastMessage.toLowerCase().includes(query)
     );
   });
+
+  const tabClass = (tab: MainTab) =>
+    `flex flex-1 flex-col items-center justify-center gap-1 py-3 text-xs font-semibold border-b-2 transition ${
+      activeTab === tab
+        ? 'border-emerald-500 text-emerald-500'
+        : isDark
+          ? 'border-transparent text-slate-400 hover:text-white'
+          : 'border-transparent text-slate-500 hover:text-slate-900'
+    }`;
 
   return (
     <div
@@ -326,191 +351,283 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           <Settings className="w-4 h-4 text-slate-400" />
         </button>
 
-        <div className="p-3">
-          <div
-            className={`flex items-center gap-2 rounded-xl px-3 py-2 ${
-              isDark ? 'bg-[#202c33]' : 'bg-slate-100'
-            }`}
-          >
-            <Search className="w-4 h-4 text-slate-400" />
-            <input
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search conversations..."
-              className="bg-transparent outline-none w-full text-sm"
-            />
-          </div>
-        </div>
-
-        <div className="px-3 pb-3">
+        {/* MAIN NAVIGATION TABS */}
+        <div
+          className={`mt-3 grid grid-cols-4 border-b ${
+            isDark
+              ? 'bg-[#202c33] border-slate-800'
+              : 'bg-[#f0f2f5] border-slate-200'
+          }`}
+        >
           <button
             type="button"
-            onClick={() => {
-              setShowNewChat(true);
-              setLocalError('');
-            }}
-            className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm py-3"
+            onClick={() => changeTab('chats')}
+            className={tabClass('chats')}
           >
-            <Plus className="w-4 h-4" />
-            New Conversation
+            <MessageSquare className="w-4 h-4" />
+            <span>Chats</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => changeTab('status')}
+            className={tabClass('status')}
+          >
+            <CircleDot className="w-4 h-4" />
+            <span>Status</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => changeTab('calls')}
+            className={tabClass('calls')}
+          >
+            <Phone className="w-4 h-4" />
+            <span>Calls</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => changeTab('settings')}
+            className={tabClass('settings')}
+          >
+            <Settings className="w-4 h-4" />
+            <span>Settings</span>
           </button>
         </div>
 
-        {showNewChat && (
-          <form
-            onSubmit={handleCreateChat}
-            className={`mx-3 mb-3 p-3 rounded-xl border ${
-              isDark
-                ? 'bg-[#202c33] border-slate-700'
-                : 'bg-slate-50 border-slate-200'
-            }`}
-          >
-            <label className="block text-xs font-semibold mb-2">
-              Enter ChatNova Custom ID
-            </label>
+        {/* CHATS TAB */}
+        {activeTab === 'chats' && (
+          <>
+            <div className="p-3">
+              <div
+                className={`flex items-center gap-2 rounded-xl px-3 py-2 ${
+                  isDark ? 'bg-[#202c33]' : 'bg-slate-100'
+                }`}
+              >
+                <Search className="w-4 h-4 text-slate-400" />
+                <input
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search conversations..."
+                  className="bg-transparent outline-none w-full text-sm"
+                />
+              </div>
+            </div>
 
-            <input
-              value={newCustomId}
-              onChange={(event) => setNewCustomId(event.target.value)}
-              placeholder="@username"
-              className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
-                isDark
-                  ? 'bg-[#111b21] border-slate-700'
-                  : 'bg-white border-slate-300'
-              }`}
-            />
-
-            {localError && (
-              <p className="text-xs text-rose-500 mt-2">
-                {localError}
-              </p>
-            )}
-
-            <div className="flex gap-2 mt-3">
+            <div className="px-3 pb-3">
               <button
                 type="button"
                 onClick={() => {
-                  setShowNewChat(false);
+                  setShowNewChat(true);
                   setLocalError('');
                 }}
-                className="flex-1 rounded-lg py-2 text-xs border border-slate-500/30"
+                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm py-3"
               >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                disabled={creatingChat}
-                className="flex-1 rounded-lg py-2 text-xs bg-emerald-600 text-white disabled:opacity-50"
-              >
-                {creatingChat ? 'Creating...' : 'Start Chat'}
+                <Plus className="w-4 h-4" />
+                New Conversation
               </button>
             </div>
-          </form>
-        )}
 
-        {backendError && (
-          <div className="mx-3 mb-3 p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-500 text-xs flex gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{backendError}</span>
-          </div>
-        )}
+            {showNewChat && (
+              <form
+                onSubmit={handleCreateChat}
+                className={`mx-3 mb-3 p-3 rounded-xl border ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <label className="block text-xs font-semibold mb-2">
+                  Enter ChatNova Custom ID
+                </label>
 
-        <div className="flex-1 overflow-y-auto">
-          {loadingChats ? (
-            <div className="p-8 text-center text-sm text-slate-400">
-              Loading your conversations...
-            </div>
-          ) : filteredChats.length === 0 ? (
-            <div className="p-8 text-center">
-              <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-400" />
-              <p className="font-semibold text-sm">
-                No conversations yet
-              </p>
-              <p className="text-xs text-slate-400 mt-1">
-                Start a new conversation using a ChatNova ID.
-              </p>
-            </div>
-          ) : (
-            filteredChats.map((chat) => {
-              const title = chat.isGroup
-                ? chat.groupName || 'Group'
-                : chat.participant?.displayName || 'ChatNova User';
-
-              const avatar = chat.isGroup
-                ? chat.groupIcon
-                : chat.participant?.avatar;
-
-              return (
-                <button
-                  type="button"
-                  key={chat.id}
-                  onClick={() => setActiveChatId(chat.id)}
-                  className={`w-full flex items-center gap-3 text-left px-4 py-3 border-b transition ${
+                <input
+                  value={newCustomId}
+                  onChange={(event) => setNewCustomId(event.target.value)}
+                  placeholder="@username"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none ${
                     isDark
-                      ? 'border-slate-800 hover:bg-[#202c33]'
-                      : 'border-slate-100 hover:bg-slate-50'
-                  } ${
-                    activeChatId === chat.id
-                      ? isDark
-                        ? 'bg-[#202c33]'
-                        : 'bg-emerald-50'
-                      : ''
+                      ? 'bg-[#111b21] border-slate-700'
+                      : 'bg-white border-slate-300'
                   }`}
-                >
-                  <AvatarImage
-                    avatar={avatar}
-                    name={title}
-                    className="w-12 h-12 rounded-full object-cover"
-                    fallbackClassName="w-12 h-12 shrink-0 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg"
-                  />
+                />
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex justify-between gap-2">
-                      <span className="font-semibold text-sm truncate">
-                        {title}
-                      </span>
-                      <span className="text-[10px] text-slate-400">
-                        {chat.lastMessage?.timestamp || ''}
-                      </span>
-                    </div>
+                {localError && (
+                  <p className="text-xs text-rose-500 mt-2">
+                    {localError}
+                  </p>
+                )}
 
-                    <p className="text-xs text-slate-400 truncate mt-1">
-                      {chat.lastMessage?.content ||
-                        (chat.isGroup
-                          ? 'Group conversation'
-                          : chat.participant?.customId || 'ChatNova')}
-                    </p>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
+                <div className="flex gap-2 mt-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewChat(false);
+                      setLocalError('');
+                    }}
+                    className="flex-1 rounded-lg py-2 text-xs border border-slate-500/30"
+                  >
+                    Cancel
+                  </button>
 
-        <footer
-          className={`p-3 border-t flex items-center gap-3 ${
-            isDark ? 'border-slate-800' : 'border-slate-200'
-          }`}
-        >
-          <AvatarImage
-            avatar={currentUser.avatar}
-            name={currentUser.displayName}
-            className="w-9 h-9 rounded-full object-cover"
-            fallbackClassName="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold"
-          />
+                  <button
+                    type="submit"
+                    disabled={creatingChat}
+                    className="flex-1 rounded-lg py-2 text-xs bg-emerald-600 text-white disabled:opacity-50"
+                  >
+                    {creatingChat ? 'Creating...' : 'Start Chat'}
+                  </button>
+                </div>
+              </form>
+            )}
 
-          <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold truncate">
-              {currentUser.displayName}
-            </p>
-            <p className="text-[10px] text-emerald-500">
-              {currentUser.customId}
-            </p>
+            {backendError && (
+              <div className="mx-3 mb-3 p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-500 text-xs flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{backendError}</span>
+              </div>
+            )}
+
+            <div className="flex-1 overflow-y-auto">
+              {loadingChats ? (
+                <div className="p-8 text-center text-sm text-slate-400">
+                  Loading your conversations...
+                </div>
+              ) : filteredChats.length === 0 ? (
+                <div className="p-8 text-center">
+                  <MessageSquare className="w-10 h-10 mx-auto mb-3 text-slate-400" />
+                  <p className="font-semibold text-sm">
+                    No conversations yet
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Start a new conversation using a ChatNova ID.
+                  </p>
+                </div>
+              ) : (
+                filteredChats.map((chat) => {
+                  const title = chat.isGroup
+                    ? chat.groupName || 'Group'
+                    : chat.participant?.displayName || 'ChatNova User';
+
+                  const avatar = chat.isGroup
+                    ? chat.groupIcon
+                    : chat.participant?.avatar;
+
+                  return (
+                    <button
+                      type="button"
+                      key={chat.id}
+                      onClick={() => setActiveChatId(chat.id)}
+                      className={`w-full flex items-center gap-3 text-left px-4 py-3 border-b transition ${
+                        isDark
+                          ? 'border-slate-800 hover:bg-[#202c33]'
+                          : 'border-slate-100 hover:bg-slate-50'
+                      } ${
+                        activeChatId === chat.id
+                          ? isDark
+                            ? 'bg-[#202c33]'
+                            : 'bg-emerald-50'
+                          : ''
+                      }`}
+                    >
+                      <AvatarImage
+                        avatar={avatar}
+                        name={title}
+                        className="w-12 h-12 rounded-full object-cover"
+                        fallbackClassName="w-12 h-12 shrink-0 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold text-lg"
+                      />
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-2">
+                          <span className="font-semibold text-sm truncate">
+                            {title}
+                          </span>
+                          <span className="text-[10px] text-slate-400">
+                            {chat.lastMessage?.timestamp || ''}
+                          </span>
+                        </div>
+
+                        <p className="text-xs text-slate-400 truncate mt-1">
+                          {chat.lastMessage?.content ||
+                            (chat.isGroup
+                              ? 'Group conversation'
+                              : chat.participant?.customId || 'ChatNova')}
+                        </p>
+                      </div>
+                    </button>
+                  );
+                })
+              )}
+            </div>
+
+            <footer
+              className={`p-3 border-t flex items-center gap-3 ${
+                isDark ? 'border-slate-800' : 'border-slate-200'
+              }`}
+            >
+              <AvatarImage
+                avatar={currentUser.avatar}
+                name={currentUser.displayName}
+                className="w-9 h-9 rounded-full object-cover"
+                fallbackClassName="w-9 h-9 rounded-full bg-emerald-600 flex items-center justify-center text-white font-bold"
+              />
+
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold truncate">
+                  {currentUser.displayName}
+                </p>
+                <p className="text-[10px] text-emerald-500">
+                  {currentUser.customId}
+                </p>
+              </div>
+
+              <Users className="w-4 h-4 text-slate-400" />
+            </footer>
+          </>
+        )}
+
+        {/* STATUS TAB */}
+        {activeTab === 'status' && (
+          <div className="flex-1 min-h-0 overflow-y-auto">
+            <StatusCenter currentUser={currentUser} />
           </div>
+        )}
 
-          <Users className="w-4 h-4 text-slate-400" />
-        </footer>
+        {/* CALLS TAB */}
+        {activeTab === 'calls' && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex flex-col items-center justify-center text-center py-12">
+              <div className="w-16 h-16 rounded-full bg-emerald-500/10 flex items-center justify-center mb-4">
+                <Phone className="w-8 h-8 text-emerald-500" />
+              </div>
+              <h2 className="text-lg font-bold">Calls</h2>
+              <p className="text-sm text-slate-400 mt-2">
+                Your call history will appear here when calling is implemented.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* SETTINGS TAB */}
+        {activeTab === 'settings' && (
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="flex flex-col items-center text-center py-10">
+              <UserCircle className="w-12 h-12 text-emerald-500 mb-3" />
+              <h2 className="font-bold text-lg">Settings</h2>
+              <p className="text-sm text-slate-400 mt-2 mb-5">
+                Manage your profile and account settings.
+              </p>
+              <button
+                type="button"
+                onClick={() => setShowProfile(true)}
+                className="rounded-xl bg-emerald-600 px-5 py-3 text-sm font-semibold text-white"
+              >
+                Open Profile Settings
+              </button>
+            </div>
+          </div>
+        )}
       </aside>
 
       <main
