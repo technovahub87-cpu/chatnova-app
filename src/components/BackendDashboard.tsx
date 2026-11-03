@@ -21,7 +21,10 @@ import { ProfileSettings } from './ProfileSettings';
 import { StatusCenter } from './StatusCenter';
 import { CallHistory } from './CallHistory';
 import { useBackendChat } from '../hooks/useBackendChat';
-import { createBackendDirectChat } from '../services/chatBackend';
+import {
+  createBackendDirectChat,
+  createBackendGroupChat
+} from '../services/chatBackend';
 import {
   mapBackendConversation,
   resolveAvatarUrl
@@ -99,9 +102,16 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
 
   const [activeTab, setActiveTab] = useState<MainTab>('chats');
   const [activeChatId, setActiveChatId] = useState<string | null>(null);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [newCustomId, setNewCustomId] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
+
+  const [showNewGroup, setShowNewGroup] = useState(false);
+  const [newGroupName, setNewGroupName] = useState('');
+  const [newGroupMembers, setNewGroupMembers] = useState('');
+  const [newGroupDescription, setNewGroupDescription] = useState('');
+
   const [creatingChat, setCreatingChat] = useState(false);
   const [localError, setLocalError] = useState('');
   const [showProfile, setShowProfile] = useState(false);
@@ -130,6 +140,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
     setActiveTab(tab);
     setActiveChatId(null);
     setShowNewChat(false);
+    setShowNewGroup(false);
     setLocalError('');
 
     if (tab === 'settings') {
@@ -191,6 +202,90 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
       setActiveChatId(newChat.id);
       setNewCustomId('');
       setShowNewChat(false);
+    } catch {
+      setLocalError('Unable to connect to ChatNova server.');
+    } finally {
+      setCreatingChat(false);
+    }
+  };
+
+  const handleCreateGroup = async (event: React.FormEvent) => {
+    event.preventDefault();
+
+    const groupName = newGroupName.trim();
+
+    const customIds = [
+      ...new Set(
+        newGroupMembers
+          .split(/[,\n;]+/)
+          .map((value) => value.trim())
+          .filter(Boolean)
+          .map((value) =>
+            value.startsWith('@') ? value : `@${value}`
+          )
+          .map((value) => value.toLowerCase())
+      )
+    ];
+
+    if (!groupName) {
+      setLocalError('Enter a group name.');
+      return;
+    }
+
+    if (groupName.length > 80) {
+      setLocalError('Group name cannot exceed 80 characters.');
+      return;
+    }
+
+    if (customIds.length === 0) {
+      setLocalError('Enter at least one other member ChatNova ID.');
+      return;
+    }
+
+    if (customIds.includes(currentUser.customId.toLowerCase())) {
+      setLocalError(
+        'Your own account is added automatically. Enter other members only.'
+      );
+      return;
+    }
+
+    setCreatingChat(true);
+    setLocalError('');
+
+    try {
+      const result = await createBackendGroupChat(
+        groupName,
+        customIds,
+        newGroupDescription.trim()
+      );
+
+      if (!result.success || !result.data) {
+        setLocalError(
+          result.message || 'Could not create group.'
+        );
+        return;
+      }
+
+      const payload: any = result.data;
+      const rawConversation = payload.conversation || payload;
+
+      const newChat = mapBackendConversation(
+        rawConversation,
+        currentUser
+      );
+
+      setChats((previous) => [
+        newChat,
+        ...previous.filter((chat) => chat.id !== newChat.id)
+      ]);
+
+      setActiveTab('chats');
+      setActiveChatId(newChat.id);
+
+      setNewGroupName('');
+      setNewGroupMembers('');
+      setNewGroupDescription('');
+      setShowNewGroup(false);
     } catch {
       setLocalError('Unable to connect to ChatNova server.');
     } finally {
@@ -382,7 +477,6 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           <Settings className="w-4 h-4 text-slate-400" />
         </button>
 
-        {/* MAIN NAVIGATION TABS */}
         <div
           className={`mt-3 grid grid-cols-4 border-b ${
             isDark
@@ -427,7 +521,6 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           </button>
         </div>
 
-        {/* CHATS TAB */}
         {activeTab === 'chats' && (
           <>
             <div className="p-3">
@@ -446,19 +539,124 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
               </div>
             </div>
 
-            <div className="px-3 pb-3">
+            <div className="px-3 pb-3 grid grid-cols-2 gap-2">
               <button
                 type="button"
                 onClick={() => {
                   setShowNewChat(true);
+                  setShowNewGroup(false);
                   setLocalError('');
                 }}
-                className="w-full flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-sm py-3"
+                className="flex items-center justify-center gap-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-semibold text-xs py-3"
               >
                 <Plus className="w-4 h-4" />
-                New Conversation
+                New Chat
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setShowNewGroup(true);
+                  setShowNewChat(false);
+                  setLocalError('');
+                }}
+                className="flex items-center justify-center gap-2 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-semibold text-xs py-3"
+              >
+                <Users className="w-4 h-4" />
+                Create Group
               </button>
             </div>
+
+            {showNewGroup && (
+              <form
+                onSubmit={handleCreateGroup}
+                className={`mx-3 mb-3 p-3 rounded-xl border ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <label className="block text-xs font-semibold mb-2">
+                  Group name
+                </label>
+
+                <input
+                  value={newGroupName}
+                  onChange={(event) => setNewGroupName(event.target.value)}
+                  maxLength={80}
+                  placeholder="e.g. Family Group"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none mb-3 ${
+                    isDark
+                      ? 'bg-[#111b21] border-slate-700'
+                      : 'bg-white border-slate-300'
+                  }`}
+                />
+
+                <label className="block text-xs font-semibold mb-2">
+                  Member ChatNova IDs
+                </label>
+
+                <textarea
+                  value={newGroupMembers}
+                  onChange={(event) => setNewGroupMembers(event.target.value)}
+                  rows={3}
+                  placeholder="@vandana, @friend1"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none resize-y mb-1 ${
+                    isDark
+                      ? 'bg-[#111b21] border-slate-700'
+                      : 'bg-white border-slate-300'
+                  }`}
+                />
+
+                <p className="text-[10px] text-slate-400 mb-3">
+                  Enter member IDs separated by commas or new lines.
+                  Your account is added automatically.
+                </p>
+
+                <label className="block text-xs font-semibold mb-2">
+                  Description (optional)
+                </label>
+
+                <input
+                  value={newGroupDescription}
+                  onChange={(event) => setNewGroupDescription(event.target.value)}
+                  maxLength={500}
+                  placeholder="About this group"
+                  className={`w-full rounded-lg border px-3 py-2 text-sm outline-none mb-3 ${
+                    isDark
+                      ? 'bg-[#111b21] border-slate-700'
+                      : 'bg-white border-slate-300'
+                  }`}
+                />
+
+                {localError && (
+                  <p className="text-xs text-rose-500 mb-2">
+                    {localError}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowNewGroup(false);
+                      setLocalError('');
+                    }}
+                    className="flex-1 rounded-lg py-2 text-xs border border-slate-500/30"
+                  >
+                    Cancel
+                  </button>
+
+                  <button
+                    type="submit"
+                    disabled={creatingChat}
+                    className="flex-1 rounded-lg py-2 text-xs bg-sky-600 text-white disabled:opacity-50"
+                  >
+                    {creatingChat ? 'Creating...' : 'Create Group'}
+                  </button>
+                </div>
+              </form>
+            )}
 
             {showNewChat && (
               <form
@@ -513,6 +711,12 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
               </form>
             )}
 
+            {localError && !showNewGroup && !showNewChat && (
+              <div className="mx-3 mb-3 text-xs text-rose-500">
+                {localError}
+              </div>
+            )}
+
             {backendError && (
               <div className="mx-3 mb-3 p-3 rounded-xl border border-rose-500/30 bg-rose-500/10 text-rose-500 text-xs flex gap-2">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -532,7 +736,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
                     No conversations yet
                   </p>
                   <p className="text-xs text-slate-400">
-                    Start a new conversation using a ChatNova ID.
+                    Start a new chat or create a group.
                   </p>
                 </div>
               ) : (
@@ -574,6 +778,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
                           <span className="font-semibold text-sm truncate">
                             {title}
                           </span>
+
                           <span className="text-[10px] text-slate-400">
                             {chat.lastMessage?.timestamp || ''}
                           </span>
@@ -618,14 +823,12 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           </>
         )}
 
-        {/* STATUS TAB */}
         {activeTab === 'status' && (
           <div className="flex-1 min-h-0 overflow-y-auto">
             <StatusCenter currentUser={currentUser} />
           </div>
         )}
 
-        {/* CALLS TAB */}
         {activeTab === 'calls' && (
           <CallHistory
             isDark={isDark}
@@ -633,7 +836,6 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
           />
         )}
 
-        {/* SETTINGS TAB */}
         {activeTab === 'settings' && (
           <div className="flex-1 overflow-y-auto p-6">
             <div className="flex flex-col items-center text-center py-10">
