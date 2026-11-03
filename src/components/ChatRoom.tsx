@@ -3,7 +3,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   ArrowLeft, Send, Paperclip, Mic, Lock, CheckCheck,
   MoreVertical, Phone, Video, Info, FileText, Image as ImageIcon,
-  X, Square, Loader2, Film, Smile
+  X, Square, Loader2, Film, Smile, Copy, Check
 } from 'lucide-react';
 
 import { Chat, Message, User } from '../types';
@@ -37,7 +37,6 @@ const EMOJIS = [
   '🌹','🌻','🌺','🍕','🍔','🍟','🍫','☕'
 ];
 
-// Detect messages containing only emoji characters.
 const isEmojiOnly = (value: string): boolean => {
   const content = value.trim();
   if (!content) return false;
@@ -60,6 +59,7 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [recordingDuration, setRecordingDuration] = useState(0);
   const [isUploadingVoice, setIsUploadingVoice] = useState(false);
   const [isUploadingVideo, setIsUploadingVideo] = useState(false);
+  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
 
   const recordingTimerRef = useRef<any>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -96,6 +96,41 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
       mediaStreamRef.current?.getTracks().forEach(track => track.stop());
     };
   }, []);
+
+  // Copy message text to the device clipboard.
+  const handleCopyMessage = async (messageId: string, content: string) => {
+    if (!content?.trim()) return;
+
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(content);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = content;
+        textArea.style.position = 'fixed';
+        textArea.style.opacity = '0';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+
+        if (!successful) {
+          throw new Error('Clipboard copy was not successful.');
+        }
+      }
+
+      setCopiedMessageId(messageId);
+      window.setTimeout(() => {
+        setCopiedMessageId(previous =>
+          previous === messageId ? null : previous
+        );
+      }, 1800);
+    } catch {
+      window.alert('Copy nahi ho paya. Browser clipboard permission check karein.');
+    }
+  };
 
   const addEmoji = (emoji: string) => {
     setInputText(previous => previous + emoji);
@@ -492,6 +527,9 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
           const isMe = msg.senderId === currentUser.id;
           const emojiOnlyMessage =
             msg.type === 'text' && isEmojiOnly(msg.content || '');
+          const messageKey = String(msg.id || idx);
+          const canCopy = msg.type === 'text' && Boolean(msg.content?.trim());
+          const isCopied = copiedMessageId === messageKey;
 
           return (
             <div
@@ -570,7 +608,26 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
                   />
                 )}
 
-                <div className="flex items-center justify-end gap-1 mt-1 text-[9px] font-mono opacity-75">
+                <div className="flex items-center justify-end gap-2 mt-1 text-[9px] font-mono opacity-75">
+                  {canCopy && (
+                    <button
+                      type="button"
+                      onClick={() => handleCopyMessage(messageKey, msg.content || '')}
+                      title={isCopied ? 'Copied' : 'Copy message'}
+                      aria-label={isCopied ? 'Message copied' : 'Copy message'}
+                      className="p-1 rounded-md hover:bg-black/10 transition flex items-center gap-1"
+                    >
+                      {isCopied ? (
+                        <>
+                          <Check className="w-3.5 h-3.5 text-emerald-400" />
+                          <span className="text-emerald-400">Copied</span>
+                        </>
+                      ) : (
+                        <Copy className="w-3.5 h-3.5" />
+                      )}
+                    </button>
+                  )}
+
                   <span>{msg.timestamp}</span>
                   {isMe && (
                     <span>
