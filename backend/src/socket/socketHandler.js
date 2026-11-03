@@ -93,7 +93,6 @@ module.exports = (io) => {
       customId: user.customId
     });
 
-    // Secure conversation joining
     socket.on('chat:join', async (data = {}) => {
       try {
         const conversationId = data.conversationId;
@@ -149,7 +148,6 @@ module.exports = (io) => {
       socket.emit('chat:left', { conversationId });
     });
 
-    // Typing notifications
     socket.on('chat:typing', async (data = {}) => {
       try {
         const conversationId = data.conversationId;
@@ -183,15 +181,17 @@ module.exports = (io) => {
       }
     });
 
-    // Start a secure one-to-one voice call
+    // Voice and video call invitation
     socket.on('call:invite', async (data = {}) => {
       try {
         const { conversationId, callId } = data;
+        const callType = data.type || 'voice';
 
         if (
           typeof conversationId !== 'string' ||
           !mongoose.Types.ObjectId.isValid(conversationId) ||
-          !isValidCallId(callId)
+          !isValidCallId(callId) ||
+          !['voice', 'video'].includes(callType)
         ) {
           return socket.emit('call:error', {
             callId,
@@ -253,7 +253,7 @@ module.exports = (io) => {
           conversationId,
           callerId: user.id,
           calleeId: peerId,
-          type: 'voice',
+          type: callType,
           status: 'ringing',
           ringTimer: null
         };
@@ -265,12 +265,14 @@ module.exports = (io) => {
 
           io.to(`user:${current.callerId}`).emit('call:timeout', {
             callId,
-            conversationId
+            conversationId,
+            type: current.type
           });
 
           io.to(`user:${current.calleeId}`).emit('call:missed', {
             callId,
-            conversationId
+            conversationId,
+            type: current.type
           });
 
           clearCall(callId);
@@ -281,7 +283,7 @@ module.exports = (io) => {
         io.to(`user:${peerId}`).emit('call:incoming', {
           callId,
           conversationId,
-          type: 'voice',
+          type: callType,
           caller: {
             id: user.id,
             customId: user.customId,
@@ -292,6 +294,7 @@ module.exports = (io) => {
         socket.emit('call:ringing', {
           callId,
           conversationId,
+          type: callType,
           recipientId: peerId
         });
       } catch (error) {
@@ -299,12 +302,11 @@ module.exports = (io) => {
 
         socket.emit('call:error', {
           callId: data.callId,
-          message: 'Unable to start the voice call.'
+          message: 'Unable to start the call.'
         });
       }
     });
 
-    // Accept incoming call
     socket.on('call:accept', (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
@@ -327,16 +329,17 @@ module.exports = (io) => {
 
       io.to(`user:${call.callerId}`).emit('call:accepted', {
         callId,
-        conversationId: call.conversationId
+        conversationId: call.conversationId,
+        type: call.type
       });
 
       socket.emit('call:accepted', {
         callId,
-        conversationId: call.conversationId
+        conversationId: call.conversationId,
+        type: call.type
       });
     });
 
-    // Reject incoming call
     socket.on('call:reject', (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
@@ -351,13 +354,13 @@ module.exports = (io) => {
 
       io.to(`user:${call.callerId}`).emit('call:rejected', {
         callId,
-        conversationId: call.conversationId
+        conversationId: call.conversationId,
+        type: call.type
       });
 
       clearCall(callId);
     });
 
-    // End active call
     socket.on('call:end', (data = {}) => {
       const { callId } = data;
       const call = activeCalls.get(callId);
@@ -375,19 +378,20 @@ module.exports = (io) => {
       io.to(`user:${otherUserId}`).emit('call:ended', {
         callId,
         conversationId: call.conversationId,
+        type: call.type,
         endedBy: user.id
       });
 
       socket.emit('call:ended', {
         callId,
         conversationId: call.conversationId,
+        type: call.type,
         endedBy: user.id
       });
 
       clearCall(callId);
     });
 
-    // Relay WebRTC offer and answer only to verified call participants
     const relayCallSignal = (eventName, expectedSender, targetEvent) => {
       socket.on(eventName, (data = {}) => {
         const { callId, signal } = data;
@@ -429,6 +433,7 @@ module.exports = (io) => {
         io.to(`user:${targetId}`).emit(targetEvent, {
           callId,
           conversationId: call.conversationId,
+          type: call.type,
           signal,
           fromUserId: user.id
         });
@@ -438,7 +443,6 @@ module.exports = (io) => {
     relayCallSignal('call:offer', 'callerId', 'call:offer');
     relayCallSignal('call:answer', 'calleeId', 'call:answer');
 
-    // Relay ICE network candidates
     socket.on('call:ice-candidate', (data = {}) => {
       const { callId, signal } = data;
       const call = activeCalls.get(callId);
@@ -464,12 +468,12 @@ module.exports = (io) => {
       io.to(`user:${targetId}`).emit('call:ice-candidate', {
         callId,
         conversationId: call.conversationId,
+        type: call.type,
         signal,
         fromUserId: user.id
       });
     });
 
-    // Message sending remains protected by the REST API
     socket.on('chat:send_message', () => {
       socket.emit('socket:error', {
         message: 'Please send messages through the secure ChatNova message API.'
@@ -487,7 +491,6 @@ module.exports = (io) => {
         onlineUsers.delete(user.id);
       }
 
-      // Keep a call alive if the same user has another connected device.
       (async () => {
         const remainingSockets =
           await io.in(`user:${user.id}`).fetchSockets();
@@ -510,6 +513,7 @@ module.exports = (io) => {
           io.to(`user:${otherUserId}`).emit('call:ended', {
             callId,
             conversationId: call.conversationId,
+            type: call.type,
             endedBy: user.id,
             reason: 'disconnected'
           });
