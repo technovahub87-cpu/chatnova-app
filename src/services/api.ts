@@ -273,8 +273,9 @@ export const conversationAPI = {
       `/conversations/${encodeURIComponent(conversationId)}`,
       { method: 'GET' }
     );
-  }
-    leaveGroup: async (conversationId: string) => {
+    },
+
+  leaveGroup: async (conversationId: string) => {
     return apiFetch<{
       message: string;
     }>(
