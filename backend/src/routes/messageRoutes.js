@@ -6,7 +6,8 @@ const { protect } = require('../middleware/protect');
 
 const {
   getMessages,
-  sendMessage
+  sendMessage,
+  markMessagesRead
 } = require('../controllers/messageController');
 
 const {
@@ -56,6 +57,9 @@ router.post(
   express.raw({ type: () => true, limit: '25mb' }),
   uploadAttachment
 );
+
+// Mark incoming messages as read
+router.post('/:conversationId/read', markMessagesRead);
 
 // Reply, Forward and Delete actions
 router.post(
