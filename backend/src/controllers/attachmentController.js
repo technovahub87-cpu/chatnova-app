@@ -1,4 +1,3 @@
-
 const mongoose = require('mongoose');
 const { GridFSBucket, ObjectId } = require('mongodb');
 const Conversation = require('../models/Conversation');
@@ -41,7 +40,7 @@ const cleanFileName = (value) => {
   try {
     name = decodeURIComponent(name);
   } catch {
-    // Keep the original safe filename if decoding fails.
+    // Keep safe original filename.
   }
 
   name = name.replace(/[^\w.\- ()]/g, '_').slice(0, 180);
@@ -105,6 +104,20 @@ const uploadAttachment = async (req, res) => {
       });
     }
 
+    // Custom stickers can only be uploaded as supported images.
+    const requestedType = String(
+      req.headers['x-message-type'] || ''
+    ).toLowerCase();
+
+    const isSticker = requestedType === 'sticker';
+
+    if (isSticker && !isImage) {
+      return res.status(415).json({
+        success: false,
+        message: 'A sticker must be an image.'
+      });
+    }
+
     const conversation = await Conversation.findOne({
       _id: conversationId,
       participants: userId,
@@ -137,7 +150,8 @@ const uploadAttachment = async (req, res) => {
         metadata: {
           conversationId: String(conversation._id),
           senderId: String(userId),
-          uploadedAt: new Date()
+          uploadedAt: new Date(),
+          messageType: isSticker ? 'sticker' : 'attachment'
         }
       }
     );
@@ -164,11 +178,15 @@ const uploadAttachment = async (req, res) => {
           recipient: recipient._id,
           recipientCustomId: recipient.customId
         } : {}),
-        type: isImage ? 'image' : 'file',
-        content: isImage ? 'Image attachment' : 'File attachment',
+        type: isSticker ? 'sticker' : isImage ? 'image' : 'file',
+        content: isSticker
+          ? 'Custom sticker'
+          : isImage
+            ? 'Image attachment'
+            : 'File attachment',
         status: 'sent',
         media: {
-          type: isImage ? 'image' : 'file',
+          type: isSticker ? 'sticker' : isImage ? 'image' : 'file',
           url: mediaUrl,
           name: originalName,
           size: String(req.body.length),
@@ -241,7 +259,7 @@ const streamAttachment = async (req, res) => {
     const mediaUrl = '/api/messages/attachment/' + fileId;
 
     const message = await Message.findOne({
-      type: { $in: ['image', 'file'] },
+      type: { $in: ['image', 'file', 'sticker'] },
       'media.url': mediaUrl
     }).select('chatId type media');
 
@@ -279,18 +297,25 @@ const streamAttachment = async (req, res) => {
     }
 
     const file = files[0];
-    const isImage = message.type === 'image';
+
+    const isImage =
+      message.type === 'image' ||
+      message.type === 'sticker';
+
     const contentType = isImage &&
       ALLOWED_IMAGE_TYPES.includes(file.contentType)
         ? file.contentType
         : 'application/octet-stream';
 
-    const fileName = cleanFileName(message.media?.name || file.filename);
+    const fileName = cleanFileName(
+      message.media?.name || file.filename
+    );
 
     res.setHeader('Content-Type', contentType);
     res.setHeader('Content-Length', file.length);
     res.setHeader('Cache-Control', 'private, no-store');
     res.setHeader('X-Content-Type-Options', 'nosniff');
+
     res.setHeader(
       'Content-Disposition',
       (isImage ? 'inline' : 'attachment') +
