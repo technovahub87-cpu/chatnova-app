@@ -78,7 +78,7 @@ const getMessages = async (req, res) => {
 const sendMessage = async (req, res) => {
   try {
     const { conversationId } = req.params;
-    const content = String(req.body.content || '').trim();
+    const type = req.body.type || 'text';
 
     if (!mongoose.Types.ObjectId.isValid(conversationId)) {
       return res.status(400).json({
@@ -87,20 +87,82 @@ const sendMessage = async (req, res) => {
       });
     }
 
-    if (!content || content.length > 10000) {
+    const allowedTypes = ['text', 'gif', 'sticker'];
+
+    if (!allowedTypes.includes(type)) {
       return res.status(400).json({
         success: false,
-        message: 'Message must contain 1 to 10000 characters.'
+        message: 'Unsupported message type.'
       });
     }
 
-    const type = req.body.type || 'text';
+    let content = String(req.body.content || '').trim();
+    let media = undefined;
 
-    if (type !== 'text') {
-      return res.status(400).json({
-        success: false,
-        message: 'Only text messages are currently supported.'
-      });
+    if (type === 'text') {
+      if (!content || content.length > 10000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Message must contain 1 to 10000 characters.'
+        });
+      }
+    } else {
+      const suppliedUrl = String(req.body.media?.url || '').trim();
+
+      let parsedUrl;
+
+      try {
+        parsedUrl = new URL(suppliedUrl);
+      } catch {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid GIF or sticker URL.'
+        });
+      }
+
+      if (parsedUrl.protocol !== 'https:') {
+        return res.status(400).json({
+          success: false,
+          message: 'GIF and sticker links must use HTTPS.'
+        });
+      }
+
+      if (suppliedUrl.length > 2000) {
+        return res.status(400).json({
+          success: false,
+          message: 'Media URL is too long.'
+        });
+      }
+
+      const allowedMediaHosts = [
+        'media.tenor.com',
+        'tenor.com',
+        'giphy.com',
+        'media.giphy.com',
+        'i.giphy.com'
+      ];
+
+      const hostAllowed = allowedMediaHosts.some(host =>
+        parsedUrl.hostname === host ||
+        parsedUrl.hostname.endsWith('.' + host)
+      );
+
+      if (!hostAllowed) {
+        return res.status(400).json({
+          success: false,
+          message: 'This GIF or sticker provider is not supported.'
+        });
+      }
+
+      content = type === 'gif' ? 'GIF attachment' : 'Sticker';
+
+      media = {
+        type: type,
+        url: suppliedUrl,
+        name: String(req.body.media?.name || type).slice(0, 180),
+        size: '0',
+        mimeType: 'image/gif'
+      };
     }
 
     const conversation = await Conversation.findOne({
@@ -117,7 +179,7 @@ const sendMessage = async (req, res) => {
     }
 
     const otherParticipants = conversation.participants.filter(
-      (participant) =>
+      participant =>
         String(participant._id) !== String(req.user._id)
     );
 
@@ -134,8 +196,9 @@ const sendMessage = async (req, res) => {
         recipient: recipient._id,
         recipientCustomId: recipient.customId
       } : {}),
-      type: 'text',
+      type,
       content,
+      ...(media ? { media } : {}),
       status: 'sent'
     });
 
@@ -244,7 +307,7 @@ const markMessagesRead = async (req, res) => {
     );
 
     const readMessageIds = unreadMessages.map(
-      (message) => String(message._id)
+      message => String(message._id)
     );
 
     const io = req.app.get('io');
@@ -252,11 +315,11 @@ const markMessagesRead = async (req, res) => {
     if (io) {
       const senderIds = [
         ...new Set(
-          unreadMessages.map((message) => String(message.sender))
+          unreadMessages.map(message => String(message.sender))
         )
       ];
 
-      senderIds.forEach((senderId) => {
+      senderIds.forEach(senderId => {
         io.to(`user:${senderId}`).emit(
           'chat:message_status',
           {
