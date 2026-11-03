@@ -633,8 +633,12 @@ const handleForwardToChat = async (target: Chat) => {
               </h3>
 
               <p className="text-[10px] font-mono text-emerald-500 truncate max-w-[200px] sm:max-w-xs">
-                {chatStatusText}
-              </p>
+  {chat.isGroup
+    ? `${chat.groupMembers?.length || 0} members in conversation`
+    : chat.participant?.status === 'online'
+      ? 'Online'
+      : `Last seen: ${chat.participant?.lastSeen || 'Recently'}`}
+</p>
             </div>
           </div>
         </div>
