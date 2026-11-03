@@ -4,13 +4,18 @@ import {
   X,
   Search,
   Loader2,
-  Image as ImageIcon
+  Image as ImageIcon,
+  Sparkles
 } from 'lucide-react';
+import StickerStudio from './StickerStudio';
 
 interface GifStickerPickerProps {
   isDark: boolean;
   onClose: () => void;
-  onSelect: (url: string, type: 'gif' | 'sticker') => void;
+  onSelect: (
+    url: string,
+    type: 'gif' | 'sticker'
+  ) => void | Promise<void>;
 }
 
 interface GiphyMedia {
@@ -61,6 +66,7 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [showStudio, setShowStudio] = useState(false);
 
   useEffect(() => {
     if (!GIPHY_API_KEY) {
@@ -100,9 +106,7 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
 
         const response = await fetch(
           `${endpoint}?${params.toString()}`,
-          {
-            signal: controller.signal
-          }
+          { signal: controller.signal }
         );
 
         if (!response.ok) {
@@ -156,7 +160,10 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
               )
             };
           })
-          .filter((item: GiphyMedia | null): item is GiphyMedia => item !== null);
+          .filter(
+            (item: GiphyMedia | null): item is GiphyMedia =>
+              item !== null
+          );
 
         setResults(items);
 
@@ -172,7 +179,6 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
         }
 
         setResults([]);
-
         setError(
           err instanceof Error
             ? err.message
@@ -205,152 +211,177 @@ export const GifStickerPicker: React.FC<GifStickerPickerProps> = ({
     if (selectedId) return;
 
     setSelectedId(item.id);
-    onSelect(item.url, activeTab);
+    void onSelect(item.url, activeTab);
+  };
+
+  const handleSendCustomSticker = async (file: File) => {
+    const url = URL.createObjectURL(file);
+
+    try {
+      await onSelect(url, 'sticker');
+    } finally {
+      URL.revokeObjectURL(url);
+    }
   };
 
   return (
-    <div
-      className={`w-[min(92vw,380px)] rounded-2xl border shadow-2xl overflow-hidden ${panelClass}`}
-    >
-      <div className="flex items-center justify-between px-3 py-3 border-b border-slate-500/20">
-        <div className="flex items-center gap-2">
-          <ImageIcon className="w-4 h-4 text-emerald-500" />
+    <>
+      <div
+        className={`w-[min(92vw,380px)] rounded-2xl border shadow-2xl overflow-hidden ${panelClass}`}
+      >
+        <div className="flex items-center justify-between px-3 py-3 border-b border-slate-500/20">
+          <div className="flex items-center gap-2">
+            <ImageIcon className="w-4 h-4 text-emerald-500" />
+            <h3 className="text-sm font-bold">
+              GIFs & Stickers
+            </h3>
+          </div>
 
-          <h3 className="text-sm font-bold">
-            GIFs & Stickers
-          </h3>
+          <button
+            type="button"
+            onClick={onClose}
+            className={`p-1.5 rounded-full ${buttonClass}`}
+            aria-label="Close picker"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        <button
-          type="button"
-          onClick={onClose}
-          className={`p-1.5 rounded-full ${buttonClass}`}
-          aria-label="Close picker"
-        >
-          <X className="w-4 h-4" />
-        </button>
-      </div>
-
-      <div className="grid grid-cols-2 p-2 gap-2">
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedId(null);
-            setActiveTab('gif');
-          }}
-          className={`py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === 'gif'
-              ? 'bg-emerald-600 text-white'
-              : buttonClass
-          }`}
-        >
-          GIF
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setSelectedId(null);
-            setActiveTab('sticker');
-          }}
-          className={`py-2 rounded-xl text-xs font-bold transition ${
-            activeTab === 'sticker'
-              ? 'bg-emerald-600 text-white'
-              : buttonClass
-          }`}
-        >
-          Stickers
-        </button>
-      </div>
-
-      <div className="px-3 pb-2">
-        <div
-          className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
-            isDark ? 'bg-[#111b21]' : 'bg-slate-100'
-          }`}
-        >
-          <Search className="w-4 h-4 opacity-60" />
-
-          <input
-            type="search"
-            value={search}
-            onChange={event => {
-              setSearch(event.target.value);
+        <div className="grid grid-cols-3 p-2 gap-2">
+          <button
+            type="button"
+            onClick={() => {
               setSelectedId(null);
+              setActiveTab('gif');
             }}
-            placeholder={
+            className={`py-2 rounded-xl text-xs font-bold transition ${
               activeTab === 'gif'
-                ? 'Search GIFs...'
-                : 'Search Stickers...'
-            }
-            className="flex-1 bg-transparent outline-none text-xs"
-          />
+                ? 'bg-emerald-600 text-white'
+                : buttonClass
+            }`}
+          >
+            GIF
+          </button>
 
-          {search && (
-            <button
-              type="button"
-              onClick={() => setSearch('')}
-              className="opacity-60"
-              aria-label="Clear search"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedId(null);
+              setActiveTab('sticker');
+            }}
+            className={`py-2 rounded-xl text-xs font-bold transition ${
+              activeTab === 'sticker'
+                ? 'bg-emerald-600 text-white'
+                : buttonClass
+            }`}
+          >
+            Stickers
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowStudio(true)}
+            className="py-2 rounded-xl text-xs font-bold transition bg-gradient-to-r from-pink-600 to-violet-600 text-white flex items-center justify-center gap-1 hover:brightness-110"
+          >
+            <Sparkles size={13} />
+            Create
+          </button>
+        </div>
+
+        <div className="px-3 pb-2">
+          <div
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl ${
+              isDark ? 'bg-[#111b21]' : 'bg-slate-100'
+            }`}
+          >
+            <Search className="w-4 h-4 opacity-60" />
+
+            <input
+              type="search"
+              value={search}
+              onChange={event => {
+                setSearch(event.target.value);
+                setSelectedId(null);
+              }}
+              placeholder={
+                activeTab === 'gif'
+                  ? 'Search GIFs...'
+                  : 'Search Stickers...'
+              }
+              className="flex-1 bg-transparent outline-none text-xs"
+            />
+
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                className="opacity-60"
+                aria-label="Clear search"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+
+        <div className="h-64 overflow-y-auto p-2">
+          {loading ? (
+            <div className="h-full flex flex-col items-center justify-center gap-2 text-emerald-500">
+              <Loader2 className="w-6 h-6 animate-spin" />
+              <span className="text-xs">
+                Loading {activeTab === 'gif' ? 'GIFs' : 'Stickers'}...
+              </span>
+            </div>
+          ) : error ? (
+            <div className="h-full flex items-center justify-center text-center p-4">
+              <p className="text-xs opacity-70">
+                {error}
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-3 gap-2">
+              {results.map(item => (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => handleSelect(item)}
+                  disabled={Boolean(selectedId)}
+                  title={item.description}
+                  className={`rounded-lg overflow-hidden bg-black/10 aspect-square transition ${
+                    activeTab === 'sticker' ? 'p-2' : ''
+                  } ${
+                    selectedId === item.id
+                      ? 'ring-2 ring-emerald-500'
+                      : 'hover:ring-2 hover:ring-emerald-500'
+                  }`}
+                >
+                  <img
+                    src={item.preview}
+                    alt={item.description}
+                    loading="lazy"
+                    className="w-full h-full object-contain"
+                  />
+                </button>
+              ))}
+            </div>
           )}
         </div>
+
+        <div className="px-3 py-2 text-center border-t border-slate-500/20">
+          <span className="text-[10px] opacity-60">
+            Powered by GIPHY
+          </span>
+        </div>
       </div>
 
-      <div className="h-64 overflow-y-auto p-2">
-        {loading ? (
-          <div className="h-full flex flex-col items-center justify-center gap-2 text-emerald-500">
-            <Loader2 className="w-6 h-6 animate-spin" />
-
-            <span className="text-xs">
-              Loading {activeTab === 'gif' ? 'GIFs' : 'Stickers'}...
-            </span>
-          </div>
-        ) : error ? (
-          <div className="h-full flex items-center justify-center text-center p-4">
-            <p className="text-xs opacity-70">
-              {error}
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-3 gap-2">
-            {results.map(item => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => handleSelect(item)}
-                disabled={Boolean(selectedId)}
-                title={item.description}
-                className={`rounded-lg overflow-hidden bg-black/10 aspect-square transition ${
-                  activeTab === 'sticker'
-                    ? 'p-2'
-                    : ''
-                } ${
-                  selectedId === item.id
-                    ? 'ring-2 ring-emerald-500'
-                    : 'hover:ring-2 hover:ring-emerald-500'
-                }`}
-              >
-                <img
-                  src={item.preview}
-                  alt={item.description}
-                  loading="lazy"
-                  className="w-full h-full object-contain"
-                />
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-
-      <div className="px-3 py-2 text-center border-t border-slate-500/20">
-        <span className="text-[10px] opacity-60">
-          Powered by GIPHY
-        </span>
-      </div>
-    </div>
+      {showStudio && (
+        <StickerStudio
+          isDark={isDark}
+          onClose={() => setShowStudio(false)}
+          onSend={handleSendCustomSticker}
+        />
+      )}
+    </>
   );
 };
 
