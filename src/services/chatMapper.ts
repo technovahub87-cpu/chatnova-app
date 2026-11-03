@@ -40,7 +40,6 @@ export const mapBackendMessage = (
   const senderId = getId(raw?.sender);
   const rawType = raw?.type || 'text';
 
-  // Preserve GIF, sticker, video and all supported message types.
   const messageType: Message['type'] =
     rawType === 'voice' ||
     rawType === 'image' ||
@@ -61,9 +60,12 @@ export const mapBackendMessage = (
       ? raw.media.type
       : 'file';
 
+  const replySource = raw?.replyTo;
+  const forwardedSource = raw?.forwardedFrom;
+
   return {
     id: getId(raw) || `message_${Date.now()}`,
-    chatId: String(raw?.chatId || ''),
+    chatId: String(raw?.chatId || raw?.conversation || ''),
     senderId,
     senderName:
       raw?.senderName ||
@@ -81,7 +83,15 @@ export const mapBackendMessage = (
       senderId === currentUserId
         ? raw?.status || 'sent'
         : 'delivered',
-    voice: raw?.voice,
+    voice: raw?.voice
+      ? {
+          duration: Number(raw.voice.duration || 0),
+          waveform: Array.isArray(raw.voice.waveform)
+            ? raw.voice.waveform
+            : [],
+          audioUrl: raw.voice.audioUrl || raw.voice.url || ''
+        }
+      : undefined,
     media: raw?.media
       ? {
           type: mediaType,
@@ -92,7 +102,43 @@ export const mapBackendMessage = (
           encryptedHash: raw.media.encryptedHash || '',
           duration: Number(raw.media.duration || 0)
         }
-      : undefined
+      : undefined,
+    replyTo: replySource
+      ? {
+          id: String(
+            replySource.messageId ||
+            replySource.id ||
+            getId(replySource.message) ||
+            ''
+          ),
+          senderName:
+            replySource.senderName ||
+            replySource.originalSenderName ||
+            'ChatNova User',
+          content:
+            replySource.content ||
+            replySource.originalContent ||
+            '',
+          type: replySource.type,
+          mediaUrl: replySource.mediaUrl || ''
+        }
+      : undefined,
+    forwardedFrom: forwardedSource
+      ? {
+          messageId: String(
+            forwardedSource.messageId ||
+            forwardedSource.id ||
+            ''
+          ),
+          senderName:
+            forwardedSource.senderName ||
+            forwardedSource.originalSenderName ||
+            'ChatNova User'
+        }
+      : undefined,
+    deletedForEveryone: Boolean(raw?.deletedForEveryone),
+    reactions: raw?.reactions || undefined,
+    isDisappearing: Boolean(raw?.isDisappearing)
   };
 };
 
