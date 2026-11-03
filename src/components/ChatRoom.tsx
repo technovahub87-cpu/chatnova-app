@@ -17,6 +17,7 @@ import { AttachmentMessage } from './AttachmentMessage';
 import { GifStickerPicker } from './GifStickerPicker';
 import { sendGifStickerMessage } from '../services/gifStickerMessages';
 import { performMessageAction } from '../services/messageActions';
+import { blockedUserAPI } from '../services/api';
 
 interface ChatRoomProps {
   chat: Chat;
@@ -75,6 +76,8 @@ export const ChatRoom: React.FC<ChatRoomProps> = ({
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [showChatMenu, setShowChatMenu] = useState(false);
   const [showInfoModal, setShowInfoModal] = useState(false);
+  const [blockedUserRecordId, setBlockedUserRecordId] = useState<string | null>(null);
+const [blockActionLoading, setBlockActionLoading] = useState(false);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showGifStickerPicker, setShowGifStickerPicker] = useState(false);
   const [isSendingGifSticker, setIsSendingGifSticker] = useState(false);
@@ -99,7 +102,86 @@ const [isForwarding, setIsForwarding] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const documentInputRef = useRef<HTMLInputElement>(null);
+useEffect(() => {
+  if (!showInfoModal || chat.isGroup || !chat.participant?.customId) {
+    return;
+  }
 
+  let cancelled = false;
+
+  const loadBlockedStatus = async () => {
+    const result = await blockedUserAPI.list();
+
+    if (!cancelled && result.success) {
+      const blocked = result.data?.blockedUsers?.find(
+        item =>
+          item.user?.customId?.toLowerCase() ===
+          chat.participant?.customId?.toLowerCase()
+      );
+
+      setBlockedUserRecordId(blocked?.blockId || null);
+    }
+  };
+
+  loadBlockedStatus();
+
+  return () => {
+    cancelled = true;
+  };
+}, [showInfoModal, chat.id, chat.isGroup, chat.participant?.customId]);
+
+const handleBlockToggle = async () => {
+  if (blockActionLoading || chat.isGroup || !chat.participant?.customId) {
+    return;
+  }
+
+  const isBlocked = Boolean(blockedUserRecordId);
+
+  const confirmed = window.confirm(
+    isBlocked
+      ? 'Kya aap is user ko unblock karna chahte hain?'
+      : 'Kya aap is user ko block karna chahte hain?'
+  );
+
+  if (!confirmed) return;
+
+  setBlockActionLoading(true);
+
+  try {
+    if (isBlocked) {
+      const result = await blockedUserAPI.unblock(blockedUserRecordId);
+
+      if (!result.success) {
+        window.alert(result.message || 'Unblock nahi ho paya.');
+        return;
+      }
+
+      setBlockedUserRecordId(null);
+      window.alert('User successfully unblock ho gaya.');
+    } else {
+      const result = await blockedUserAPI.block(chat.participant.customId);
+
+      if (!result.success) {
+        window.alert(result.message || 'User block nahi ho paya.');
+        return;
+      }
+
+      const listResult = await blockedUserAPI.list();
+      const blocked = listResult.data?.blockedUsers?.find(
+        item =>
+          item.user?.customId?.toLowerCase() ===
+          chat.participant?.customId?.toLowerCase()
+      );
+
+      setBlockedUserRecordId(blocked?.blockId || null);
+      window.alert('User successfully block ho gaya.');
+    }
+  } catch {
+    window.alert('Server se connection nahi ho paya.');
+  } finally {
+    setBlockActionLoading(false);
+  }
+};
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
