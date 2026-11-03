@@ -2,6 +2,7 @@
 const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const User = require('../models/User');
+const { isBlockedBetween } = require('../services/blockService');
 
 const normalizeCustomId = (value) =>
   String(value || '').trim().toLowerCase().replace(/^@?/, '@');
@@ -44,6 +45,12 @@ const createDirectConversation = async (req, res) => {
         message: 'You cannot start a conversation with yourself.'
       });
     }
+    if (await isBlockedBetween(req.user._id, targetUser._id)) {
+  return res.status(403).json({
+    success: false,
+    message: 'You cannot start a conversation because one of these users has blocked the other.'
+  });
+}
 
     const sortedIds = [
       currentUserId,
