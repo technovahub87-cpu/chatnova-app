@@ -63,6 +63,25 @@ export const mapBackendMessage = (
   const replySource = raw?.replyTo;
   const forwardedSource = raw?.forwardedFrom;
 
+  // Empty MongoDB nested objects must NOT be treated as real replies.
+  const replyMessageId = String(
+    replySource?.messageId ||
+    replySource?.id ||
+    getId(replySource?.message) ||
+    ''
+  );
+
+  // A real forwarded message must have its original message reference.
+  const forwardedMessageId = String(
+    forwardedSource?.messageId ||
+    forwardedSource?.id ||
+    ''
+  );
+
+  const hasRealReply = Boolean(replyMessageId);
+  const hasRealForward =
+    Boolean(forwardedSource?.isForwarded || forwardedMessageId);
+
   return {
     id: getId(raw) || `message_${Date.now()}`,
     chatId: String(raw?.chatId || raw?.conversation || ''),
@@ -103,14 +122,11 @@ export const mapBackendMessage = (
           duration: Number(raw.media.duration || 0)
         }
       : undefined,
-    replyTo: replySource
+
+    // Only attach reply metadata when a real original message exists.
+    replyTo: hasRealReply
       ? {
-          id: String(
-            replySource.messageId ||
-            replySource.id ||
-            getId(replySource.message) ||
-            ''
-          ),
+          id: replyMessageId,
           senderName:
             replySource.senderName ||
             replySource.originalSenderName ||
@@ -118,24 +134,24 @@ export const mapBackendMessage = (
           content:
             replySource.content ||
             replySource.originalContent ||
+            replySource.mediaName ||
             '',
           type: replySource.type,
           mediaUrl: replySource.mediaUrl || ''
         }
       : undefined,
-    forwardedFrom: forwardedSource
+
+    // Only attach forwarded metadata to genuinely forwarded messages.
+    forwardedFrom: hasRealForward
       ? {
-          messageId: String(
-            forwardedSource.messageId ||
-            forwardedSource.id ||
-            ''
-          ),
+          messageId: forwardedMessageId,
           senderName:
             forwardedSource.senderName ||
             forwardedSource.originalSenderName ||
             'ChatNova User'
         }
       : undefined,
+
     deletedForEveryone: Boolean(raw?.deletedForEveryone),
     reactions: raw?.reactions || undefined,
     isDisappearing: Boolean(raw?.isDisappearing)
