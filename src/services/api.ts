@@ -274,6 +274,14 @@ export const conversationAPI = {
       { method: 'GET' }
     );
   }
+    leaveGroup: async (conversationId: string) => {
+    return apiFetch<{
+      message: string;
+    }>(
+      `/conversations/${encodeURIComponent(conversationId)}/leave`,
+      { method: 'POST' }
+    );
+  }
 };
 
 // MESSAGE APIS
