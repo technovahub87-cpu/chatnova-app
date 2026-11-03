@@ -7,6 +7,7 @@ const Call = require('../models/Call');
 const { setUserOnline, setUserOffline } = require('../services/presenceService');
 const onlineUsers = new Map();
 const activeCalls = new Map();
+const { isBlockedBetween } = require('../services/blockService');
 
 const CALL_RING_TIMEOUT_MS = 45000;
 const MAX_SDP_LENGTH = 100000;
@@ -250,6 +251,12 @@ module.exports = (io) => {
             message: 'Call recipient could not be verified.'
           });
         }
+        if (await isBlockedBetween(user.id, peerId)) {
+  return socket.emit('call:error', {
+    callId,
+    message: 'Calls are unavailable because one of these users has blocked the other.'
+  });
+}
 
         const peerSockets = await io.in(`user:${peerId}`).fetchSockets();
 
