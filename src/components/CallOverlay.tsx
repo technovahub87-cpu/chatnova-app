@@ -9,7 +9,8 @@ import {
   VideoOff,
   AlertCircle,
   X,
-  Camera
+  Camera,
+  Volume2
 } from 'lucide-react';
 import {
   webrtcCallService,
@@ -44,6 +45,82 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const handledRequestRef = useRef<string | null>(null);
+
+  // Incoming call ringtone
+  useEffect(() => {
+    if (!incomingCall) return;
+
+    let audioContext: AudioContext | null = null;
+    let ringTimer: number | null = null;
+    let stopped = false;
+
+    const playRing = async () => {
+      try {
+        const AudioContextClass =
+          window.AudioContext ||
+          (window as any).webkitAudioContext;
+
+        if (!AudioContextClass || stopped) return;
+
+        if (!audioContext) {
+          audioContext = new AudioContextClass();
+        }
+
+        if (audioContext.state === 'suspended') {
+          await audioContext.resume();
+        }
+
+        if (stopped || audioContext.state !== 'running') return;
+
+        const now = audioContext.currentTime;
+
+        [0, 0.22].forEach((offset) => {
+          const oscillator = audioContext!.createOscillator();
+          const gain = audioContext!.createGain();
+
+          oscillator.type = 'sine';
+          oscillator.frequency.setValueAtTime(440, now + offset);
+
+          gain.gain.setValueAtTime(0, now + offset);
+          gain.gain.linearRampToValueAtTime(
+            0.16,
+            now + offset + 0.04
+          );
+          gain.gain.setValueAtTime(
+            0.16,
+            now + offset + 0.38
+          );
+          gain.gain.linearRampToValueAtTime(
+            0,
+            now + offset + 0.48
+          );
+
+          oscillator.connect(gain);
+          gain.connect(audioContext!.destination);
+
+          oscillator.start(now + offset);
+          oscillator.stop(now + offset + 0.5);
+        });
+      } catch (err) {
+        console.warn('[ChatNova Ringtone]:', err);
+      }
+    };
+
+    playRing();
+    ringTimer = window.setInterval(playRing, 1800);
+
+    return () => {
+      stopped = true;
+
+      if (ringTimer !== null) {
+        window.clearInterval(ringTimer);
+      }
+
+      if (audioContext && audioContext.state !== 'closed') {
+        audioContext.close().catch(() => {});
+      }
+    };
+  }, [incomingCall]);
 
   useEffect(() => {
     webrtcCallService.initialize();
@@ -105,6 +182,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   useEffect(() => {
     if (localVideoRef.current) {
       localVideoRef.current.srcObject = localStream;
+
       if (localStream) {
         localVideoRef.current.play().catch(() => {});
       }
@@ -114,6 +192,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   useEffect(() => {
     if (remoteVideoRef.current) {
       remoteVideoRef.current.srcObject = remoteStream;
+
       if (remoteStream) {
         remoteVideoRef.current.play().catch(() => {});
       }
@@ -242,202 +321,237 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   if (!visible) return null;
 
   const isVideo = currentType === 'video';
+  const isActive = webrtcCallService.isInCall();
 
   return (
-    <div className="fixed inset-0 z-[100] bg-[#071018]/95 backdrop-blur-md flex items-center justify-center p-3 sm:p-5">
-      <div className="w-full max-w-4xl rounded-3xl bg-[#14212b] border border-cyan-500/20 shadow-2xl text-white overflow-hidden">
+    <div className="fixed inset-0 z-[100] w-screen h-[100dvh] bg-[#050b12] text-white overflow-hidden">
 
-        <div className="flex items-center justify-between px-5 py-4 border-b border-white/10">
-          <div className="flex items-center gap-3">
-            {isVideo ? (
-              <Video className="w-5 h-5 text-cyan-400" />
-            ) : (
-              <Phone className="w-5 h-5 text-emerald-400" />
-            )}
-            <div>
-              <div className="font-bold">ChatNova</div>
-              <div className="text-xs text-slate-400">
-                {isVideo ? 'Video Call' : 'Voice Call'}
+      {isVideo ? (
+        <div className="absolute inset-0 bg-black">
+
+          {remoteStream ? (
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 bg-[#101d29]">
+              <div className="w-28 h-28 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-5">
+                <Camera className="w-12 h-12 text-cyan-400" />
               </div>
+
+              <h2 className="text-2xl font-bold">
+                {incomingCall?.caller?.displayName || 'ChatNova Contact'}
+              </h2>
+
+              <p className="text-sm text-slate-300 mt-3">
+                {statusText[callStatus] || 'Waiting for video...'}
+              </p>
             </div>
-          </div>
+          )}
 
-          <button
-            type="button"
-            onClick={closePanel}
-            disabled={busy || webrtcCallService.isInCall()}
-            className="p-2 rounded-full hover:bg-white/10 disabled:opacity-30"
-            title="Close"
-          >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
-
-        {isVideo ? (
-          <div className="relative bg-black aspect-video max-h-[65vh] overflow-hidden">
-            {remoteStream ? (
+          {localStream && (
+            <div className="absolute top-20 right-3 sm:top-6 sm:right-6 w-28 sm:w-44 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/60 shadow-2xl bg-slate-900 z-20">
               <video
-                ref={remoteVideoRef}
+                ref={localVideoRef}
                 autoPlay
                 playsInline
-                className="w-full h-full object-contain"
+                muted
+                className="w-full h-full object-cover scale-x-[-1]"
               />
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5">
-                <div className="w-24 h-24 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-4">
-                  <Camera className="w-10 h-10 text-cyan-400" />
-                </div>
-                <div className="font-semibold">
-                  {incomingCall?.caller?.displayName || 'ChatNova Contact'}
-                </div>
-                <div className="text-sm text-slate-400 mt-2">
-                  {statusText[callStatus] || 'Waiting for video...'}
-                </div>
-              </div>
-            )}
 
-            {localStream && (
-              <div className="absolute bottom-4 right-4 w-28 sm:w-44 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/40 shadow-xl bg-slate-900">
-                <video
-                  ref={localVideoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover scale-x-[-1]"
-                />
-                {!cameraEnabled && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-slate-900/90 text-xs">
-                    Camera off
+              {!cameraEnabled && (
+                <div className="absolute inset-0 flex items-center justify-center bg-slate-900/95 text-xs">
+                  Camera off
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="absolute top-0 inset-x-0 z-30 px-4 pt-[max(env(safe-area-inset-top),16px)] pb-5 bg-gradient-to-b from-black/80 to-transparent">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Video className="w-5 h-5 text-cyan-400" />
+                <div>
+                  <div className="font-bold">ChatNova Video Call</div>
+                  <div className="text-xs text-slate-200">
+                    {statusText[callStatus] || 'Video Call'}
                   </div>
-                )}
+                </div>
+              </div>
+
+              {callStatus === 'connected' && (
+                <span className="px-3 py-1 rounded-full bg-emerald-500/80 text-white text-xs">
+                  Connected
+                </span>
+              )}
+            </div>
+          </div>
+
+          <div className="absolute bottom-0 inset-x-0 z-30 pt-12 pb-[max(env(safe-area-inset-bottom),20px)] bg-gradient-to-t from-black/90 via-black/50 to-transparent">
+            {error && (
+              <div className="mx-4 mb-4 p-3 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 text-xs flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
-            {callStatus === 'connected' && (
-              <div className="absolute top-4 left-4 px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-300 text-xs">
-                Connected
+            {incomingCall ? (
+              <div className="flex items-center justify-center gap-8 px-5">
+                <button
+                  type="button"
+                  onClick={rejectCall}
+                  disabled={busy}
+                  className="w-16 h-16 rounded-full bg-rose-600 flex flex-col items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <PhoneOff className="w-6 h-6" />
+                  <span className="text-[10px]">Reject</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={acceptCall}
+                  disabled={busy}
+                  className="w-16 h-16 rounded-full bg-emerald-600 flex flex-col items-center justify-center gap-1 disabled:opacity-50"
+                >
+                  <Phone className="w-6 h-6" />
+                  <span className="text-[10px]">{busy ? 'Wait' : 'Accept'}</span>
+                </button>
               </div>
+            ) : isActive ? (
+              <div className="flex items-center justify-center gap-5 px-4">
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
+                  title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
+                >
+                  {micEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleCamera}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center ${cameraEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
+                  title={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
+                >
+                  {cameraEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={endCall}
+                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
+                  title="End call"
+                >
+                  <PhoneOff className="w-7 h-7" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={closePanel}
+                className="mx-auto block px-8 py-3 rounded-full bg-slate-700"
+              >
+                Close
+              </button>
             )}
           </div>
-        ) : (
-          <div className="flex flex-col items-center text-center py-12 px-5">
-            <div className="w-24 h-24 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-5">
-              <Mic className="w-11 h-11 text-emerald-400" />
+        </div>
+      ) : (
+        <div className="absolute inset-0 flex flex-col items-center justify-between bg-gradient-to-b from-[#14212b] to-[#071018]">
+
+          <div className="w-full flex items-center justify-between p-5 pt-[max(env(safe-area-inset-top),20px)]">
+            <div className="flex items-center gap-3">
+              <Phone className="w-5 h-5 text-emerald-400" />
+              <div>
+                <div className="font-bold">ChatNova</div>
+                <div className="text-xs text-slate-400">Voice Call</div>
+              </div>
+            </div>
+            <Volume2 className="w-5 h-5 text-slate-400" />
+          </div>
+
+          <div className="flex flex-col items-center text-center px-5">
+            <div className="w-32 h-32 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-6">
+              <Mic className="w-14 h-14 text-emerald-400" />
             </div>
 
-            <h2 className="text-xl font-bold">
+            <h2 className="text-2xl font-bold">
               {incomingCall?.caller?.displayName || 'ChatNova Contact'}
             </h2>
 
-            <p className="text-sm text-emerald-400 mt-2">
-              {statusText[callStatus] || 'Voice call'}
-            </p>
-          </div>
-        )}
-
-        {incomingCall && (
-          <div className="px-5 pt-4 text-center">
-            <h2 className="font-bold">
-              {incomingCall.caller?.displayName || 'ChatNova Contact'}
-            </h2>
-            {incomingCall.caller?.customId && (
-              <p className="text-xs text-slate-400 mt-1">
+            {incomingCall?.caller?.customId && (
+              <p className="text-sm text-slate-400 mt-2">
                 {incomingCall.caller.customId}
               </p>
             )}
+
+            <p className="text-emerald-400 mt-4">
+              {statusText[callStatus] || 'Voice Call'}
+            </p>
           </div>
-        )}
 
-        {error && (
-          <div className="mx-5 mt-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex gap-2">
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{error}</span>
-          </div>
-        )}
-
-        {incomingCall ? (
-          <div className="grid grid-cols-2 gap-3 p-5">
-            <button
-              type="button"
-              onClick={rejectCall}
-              disabled={busy}
-              className="py-3 rounded-2xl bg-rose-600 hover:bg-rose-500 font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <PhoneOff className="w-4 h-4" />
-              Reject
-            </button>
-
-            <button
-              type="button"
-              onClick={acceptCall}
-              disabled={busy}
-              className="py-3 rounded-2xl bg-emerald-600 hover:bg-emerald-500 font-semibold flex items-center justify-center gap-2 disabled:opacity-50"
-            >
-              <Phone className="w-4 h-4" />
-              {busy ? 'Please wait...' : 'Accept'}
-            </button>
-          </div>
-        ) : webrtcCallService.isInCall() ? (
-          <div className="flex items-center justify-center gap-4 p-5">
-            <button
-              type="button"
-              onClick={toggleMic}
-              className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                micEnabled ? 'bg-slate-700' : 'bg-rose-600'
-              }`}
-              title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
-            >
-              {micEnabled ? (
-                <Mic className="w-5 h-5" />
-              ) : (
-                <MicOff className="w-5 h-5" />
-              )}
-            </button>
-
-            {isVideo && (
-              <button
-                type="button"
-                onClick={toggleCamera}
-                className={`w-12 h-12 rounded-full flex items-center justify-center ${
-                  cameraEnabled ? 'bg-slate-700' : 'bg-rose-600'
-                }`}
-                title={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
-              >
-                {cameraEnabled ? (
-                  <Video className="w-5 h-5" />
-                ) : (
-                  <VideoOff className="w-5 h-5" />
-                )}
-              </button>
+          <div className="w-full pb-[max(env(safe-area-inset-bottom),24px)]">
+            {error && (
+              <div className="mx-4 mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex gap-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{error}</span>
+              </div>
             )}
 
-            <button
-              type="button"
-              onClick={endCall}
-              className="w-14 h-14 rounded-full bg-rose-600 hover:bg-rose-500 active:scale-95 flex items-center justify-center cursor-pointer"
-              title="End call"
-            >
-              <PhoneOff className="w-6 h-6" />
-            </button>
-          </div>
-        ) : (
-          <div className="p-5">
-            <button
-              type="button"
-              onClick={closePanel}
-              className="w-full py-3 rounded-2xl bg-slate-700 hover:bg-slate-600 font-semibold"
-            >
-              Close
-            </button>
-          </div>
-        )}
+            {incomingCall ? (
+              <div className="flex items-center justify-center gap-10">
+                <button
+                  type="button"
+                  onClick={rejectCall}
+                  disabled={busy}
+                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center disabled:opacity-50"
+                >
+                  <PhoneOff className="w-7 h-7" />
+                </button>
 
-        <p className="text-[10px] text-slate-500 text-center pb-4 px-4">
-          {isVideo
-            ? 'Allow camera and microphone permissions when your browser asks.'
-            : 'Allow microphone permission when your browser asks.'}
-        </p>
-      </div>
+                <button
+                  type="button"
+                  onClick={acceptCall}
+                  disabled={busy}
+                  className="w-16 h-16 rounded-full bg-emerald-600 flex items-center justify-center disabled:opacity-50"
+                >
+                  <Phone className="w-7 h-7" />
+                </button>
+              </div>
+            ) : isActive ? (
+              <div className="flex items-center justify-center gap-6">
+                <button
+                  type="button"
+                  onClick={toggleMic}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}
+                >
+                  {micEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={endCall}
+                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
+                >
+                  <PhoneOff className="w-7 h-7" />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={closePanel}
+                className="mx-auto block px-8 py-3 rounded-full bg-slate-700"
+              >
+                Close
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 };
