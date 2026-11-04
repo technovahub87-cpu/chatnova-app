@@ -41,6 +41,15 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [micEnabled, setMicEnabled] = useState(true);
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [currentType, setCurrentType] = useState<CallType>('voice');
+  const [callVolume, setCallVolume] = useState(1);
+
+useEffect(() => {
+  webrtcCallService.setRemoteVolume(callVolume);
+
+  if (remoteVideoRef.current) {
+    remoteVideoRef.current.volume = callVolume;
+  }
+}, [callVolume, remoteStream]);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
