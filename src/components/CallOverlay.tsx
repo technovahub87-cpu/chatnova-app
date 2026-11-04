@@ -492,6 +492,14 @@ useEffect(() => {
 </button>
                 <button
                   type="button"
+                  <button
+  type="button"
+  onClick={toggleSpeaker}
+  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-slate-700'}`}
+  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
+>
+  {speakerEnabled ? <Volume2 className="w-6 h-6" /> : <Headphones className="w-6 h-6" />}
+</button>
                   onClick={endCall}
                   className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
                   title="End call"
