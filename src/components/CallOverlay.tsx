@@ -530,7 +530,27 @@ useEffect(() => {
                 <span>{error}</span>
               </div>
             )}
-
+{isActive && (
+  <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
+    <div className="mb-2 flex items-center justify-between text-xs">
+      <span>Call Volume</span>
+      <span>{Math.round(callVolume * 100)}%</span>
+    </div>
+    <div className="flex items-center gap-3">
+      <Volume2 className="h-5 w-5 shrink-0" />
+      <input
+        type="range"
+        min="0"
+        max="1"
+        step="0.05"
+        value={callVolume}
+        onChange={(e) => setCallVolume(Number(e.target.value))}
+        className="w-full accent-cyan-400"
+        aria-label="Call volume"
+      />
+    </div>
+  </div>
+)}
             {incomingCall ? (
               <div className="flex items-center justify-center gap-10">
                 <button
