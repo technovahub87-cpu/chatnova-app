@@ -4,6 +4,11 @@ import { wsService } from './websocket';
 type CallRole = 'caller' | 'callee';
 export type CallType = 'voice' | 'video';
 
+export interface AudioOutputDevice {
+  deviceId: string;
+  label: string;
+}
+
 interface ActiveCall {
   callId: string;
   conversationId: string;
@@ -18,6 +23,7 @@ class WebRTCCallService {
   private activeCall: ActiveCall | null = null;
   private remoteAudio: HTMLAudioElement | null = null;
   private initialized = false;
+  private selectedAudioOutput = '';
 
   onIncomingCall: ((data: any) => void) | null = null;
   onCallStatus: ((status: string, data?: any) => void) | null = null;
@@ -159,6 +165,11 @@ class WebRTCCallService {
         }
 
         this.remoteAudio.srcObject = stream;
+
+        if (this.selectedAudioOutput) {
+          this.applyAudioOutput(this.selectedAudioOutput);
+        }
+
         this.remoteAudio.play().catch((error) => {
           console.warn('[ChatNova Call] Audio playback needs user interaction:', error);
         });
@@ -401,6 +412,65 @@ class WebRTCCallService {
       } catch (error) {
         console.warn('[ChatNova Call] Pending ICE candidate error:', error);
       }
+    }
+  }
+
+  private async applyAudioOutput(deviceId: string): Promise<void> {
+    if (!this.remoteAudio) return;
+
+    const audio = this.remoteAudio as HTMLAudioElement & {
+      setSinkId?: (id: string) => Promise<void>;
+    };
+
+    if (typeof audio.setSinkId !== 'function') {
+      console.warn('[ChatNova Call] Audio output selection is not supported on this device.');
+      return;
+    }
+
+    try {
+      await audio.setSinkId(deviceId);
+    } catch (error) {
+      console.warn('[ChatNova Call] Could not change audio output:', error);
+    }
+  }
+
+  async getAudioOutputDevices(): Promise<AudioOutputDevice[]> {
+    if (!navigator.mediaDevices?.enumerateDevices) return [];
+
+    try {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+
+      return devices
+        .filter((device) => device.kind === 'audiooutput')
+        .map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Audio output ${index + 1}`
+        }));
+    } catch (error) {
+      console.warn('[ChatNova Call] Could not list audio outputs:', error);
+      return [];
+    }
+  }
+
+  async setAudioOutput(deviceId: string): Promise<boolean> {
+    this.selectedAudioOutput = deviceId;
+
+    if (!this.remoteAudio) return true;
+
+    const audio = this.remoteAudio as HTMLAudioElement & {
+      setSinkId?: (id: string) => Promise<void>;
+    };
+
+    if (typeof audio.setSinkId !== 'function') {
+      return false;
+    }
+
+    try {
+      await audio.setSinkId(deviceId);
+      return true;
+    } catch (error) {
+      console.warn('[ChatNova Call] Audio output change failed:', error);
+      return false;
     }
   }
 
