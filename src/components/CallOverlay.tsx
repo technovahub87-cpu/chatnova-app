@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone,
@@ -9,7 +8,7 @@ import {
   VideoOff,
   AlertCircle,
   X,
-   Camera,
+  Camera,
   Volume2,
   Headphones
 } from 'lucide-react';
@@ -45,17 +44,17 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [callVolume, setCallVolume] = useState(1);
   const [speakerEnabled, setSpeakerEnabled] = useState(false);
 
-useEffect(() => {
-  webrtcCallService.setRemoteVolume(callVolume);
-
-  if (remoteVideoRef.current) {
-    remoteVideoRef.current.volume = callVolume;
-  }
-}, [callVolume, remoteStream]);
-
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const handledRequestRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    webrtcCallService.setRemoteVolume(callVolume);
+
+    if (remoteVideoRef.current) {
+      remoteVideoRef.current.volume = callVolume;
+    }
+  }, [callVolume, remoteStream]);
 
   // Incoming call ringtone
   useEffect(() => {
@@ -139,6 +138,7 @@ useEffect(() => {
     webrtcCallService.onIncomingCall = (data) => {
       setIncomingCall(data);
       setCurrentType(data.type === 'video' ? 'video' : 'voice');
+      setSpeakerEnabled(data.type === 'video');
       setCallStatus('incoming');
       setError('');
       setBusy(false);
@@ -217,6 +217,7 @@ useEffect(() => {
     onRequestHandled();
 
     setCurrentType(request.type);
+    setSpeakerEnabled(request.type === 'video');
     setError('');
     setIncomingCall(null);
     setCallStatus('calling');
@@ -244,6 +245,7 @@ useEffect(() => {
       incomingCall.type === 'video' ? 'video' : 'voice';
 
     setCurrentType(type);
+    setSpeakerEnabled(type === 'video');
 
     try {
       await webrtcCallService.acceptIncomingCall(
@@ -295,18 +297,22 @@ useEffect(() => {
     const enabled = webrtcCallService.toggleCamera();
     setCameraEnabled(enabled);
   };
+
   const toggleSpeaker = async () => {
-  const nextEnabled = !speakerEnabled;
+    const nextEnabled = !speakerEnabled;
 
-  const changed = await webrtcCallService.setSpeakerEnabled(nextEnabled);
+    const changed =
+      await webrtcCallService.setSpeakerEnabled(nextEnabled);
 
-  if (changed) {
-    setSpeakerEnabled(nextEnabled);
-    setError('');
-  } else {
-    setError('Speaker/Earpiece switching is available in the ChatNova Android app.');
-  }
-};
+    if (changed) {
+      setSpeakerEnabled(nextEnabled);
+      setError('');
+    } else {
+      setError(
+        'Speaker/Earpiece switching is available in the ChatNova Android app.'
+      );
+    }
+  };
 
   const closePanel = () => {
     setIncomingCall(null);
@@ -420,27 +426,29 @@ useEffect(() => {
                 <span>{error}</span>
               </div>
             )}
-{isActive && (
-  <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
-    <div className="mb-2 flex items-center justify-between text-xs">
-      <span>Call Volume</span>
-      <span>{Math.round(callVolume * 100)}%</span>
-    </div>
-    <div className="flex items-center gap-3">
-      <Volume2 className="h-5 w-5 shrink-0" />
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.05"
-        value={callVolume}
-        onChange={(e) => setCallVolume(Number(e.target.value))}
-        className="w-full accent-cyan-400"
-        aria-label="Call volume"
-      />
-    </div>
-  </div>
-)}
+
+            {isActive && (
+              <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span>Call Volume</span>
+                  <span>{Math.round(callVolume * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Volume2 className="h-5 w-5 shrink-0" />
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={callVolume}
+                    onChange={(e) => setCallVolume(Number(e.target.value))}
+                    className="w-full accent-cyan-400"
+                    aria-label="Call volume"
+                  />
+                </div>
+              </div>
+            )}
+
             {incomingCall ? (
               <div className="flex items-center justify-center gap-8 px-5">
                 <button
@@ -460,7 +468,9 @@ useEffect(() => {
                   className="w-16 h-16 rounded-full bg-emerald-600 flex flex-col items-center justify-center gap-1 disabled:opacity-50"
                 >
                   <Phone className="w-6 h-6" />
-                  <span className="text-[10px]">{busy ? 'Wait' : 'Accept'}</span>
+                  <span className="text-[10px]">
+                    {busy ? 'Wait' : 'Accept'}
+                  </span>
                 </button>
               </div>
             ) : isActive ? (
@@ -471,7 +481,9 @@ useEffect(() => {
                   className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
                   title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
                 >
-                  {micEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                  {micEnabled
+                    ? <Mic className="w-6 h-6" />
+                    : <MicOff className="w-6 h-6" />}
                 </button>
 
                 <button
@@ -480,26 +492,24 @@ useEffect(() => {
                   className={`w-14 h-14 rounded-full flex items-center justify-center ${cameraEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
                   title={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
                 >
-                  {cameraEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
+                  {cameraEnabled
+                    ? <Video className="w-6 h-6" />
+                    : <VideoOff className="w-6 h-6" />}
                 </button>
-<button
-  type="button"
-  onClick={toggleSpeaker}
-  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-white/20'}`}
-  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
->
-  {speakerEnabled ? <Volume2 className="w-6 h-6" /> : <Headphones className="w-6 h-6" />}
-</button>
+
                 <button
                   type="button"
-                  <button
-  type="button"
-  onClick={toggleSpeaker}
-  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-slate-700'}`}
-  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
->
-  {speakerEnabled ? <Volume2 className="w-6 h-6" /> : <Headphones className="w-6 h-6" />}
-</button>
+                  onClick={toggleSpeaker}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-white/20'}`}
+                  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
+                >
+                  {speakerEnabled
+                    ? <Volume2 className="w-6 h-6" />
+                    : <Headphones className="w-6 h-6" />}
+                </button>
+
+                <button
+                  type="button"
                   onClick={endCall}
                   className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
                   title="End call"
@@ -559,27 +569,29 @@ useEffect(() => {
                 <span>{error}</span>
               </div>
             )}
-{isActive && (
-  <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
-    <div className="mb-2 flex items-center justify-between text-xs">
-      <span>Call Volume</span>
-      <span>{Math.round(callVolume * 100)}%</span>
-    </div>
-    <div className="flex items-center gap-3">
-      <Volume2 className="h-5 w-5 shrink-0" />
-      <input
-        type="range"
-        min="0"
-        max="1"
-        step="0.05"
-        value={callVolume}
-        onChange={(e) => setCallVolume(Number(e.target.value))}
-        className="w-full accent-cyan-400"
-        aria-label="Call volume"
-      />
-    </div>
-  </div>
-)}
+
+            {isActive && (
+              <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
+                <div className="mb-2 flex items-center justify-between text-xs">
+                  <span>Call Volume</span>
+                  <span>{Math.round(callVolume * 100)}%</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Volume2 className="h-5 w-5 shrink-0" />
+                  <input
+                    type="range"
+                    min="0"
+                    max="1"
+                    step="0.05"
+                    value={callVolume}
+                    onChange={(e) => setCallVolume(Number(e.target.value))}
+                    className="w-full accent-cyan-400"
+                    aria-label="Call volume"
+                  />
+                </div>
+              </div>
+            )}
+
             {incomingCall ? (
               <div className="flex items-center justify-center gap-10">
                 <button
@@ -607,13 +619,27 @@ useEffect(() => {
                   onClick={toggleMic}
                   className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}
                 >
-                  {micEnabled ? <Mic className="w-6 h-6" /> : <MicOff className="w-6 h-6" />}
+                  {micEnabled
+                    ? <Mic className="w-6 h-6" />
+                    : <MicOff className="w-6 h-6" />}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleSpeaker}
+                  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-slate-700'}`}
+                  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
+                >
+                  {speakerEnabled
+                    ? <Volume2 className="w-6 h-6" />
+                    : <Headphones className="w-6 h-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={endCall}
                   className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
+                  title="End call"
                 >
                   <PhoneOff className="w-7 h-7" />
                 </button>
