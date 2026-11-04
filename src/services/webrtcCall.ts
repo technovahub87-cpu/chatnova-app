@@ -473,7 +473,17 @@ class WebRTCCallService {
       return false;
     }
   }
+  setRemoteVolume(volume: number): void {
+    const safeVolume = Math.max(0, Math.min(1, volume));
 
+    if (this.remoteAudio) {
+      this.remoteAudio.volume = safeVolume;
+    }
+  }
+
+  getRemoteVolume(): number {
+    return this.remoteAudio?.volume ?? 1;
+  }
   toggleMicrophone(): boolean {
     const tracks = this.activeCall?.localStream?.getAudioTracks() || [];
 
