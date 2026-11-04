@@ -295,6 +295,18 @@ useEffect(() => {
     const enabled = webrtcCallService.toggleCamera();
     setCameraEnabled(enabled);
   };
+  const toggleSpeaker = async () => {
+  const nextEnabled = !speakerEnabled;
+
+  const changed = await webrtcCallService.setSpeakerEnabled(nextEnabled);
+
+  if (changed) {
+    setSpeakerEnabled(nextEnabled);
+    setError('');
+  } else {
+    setError('Speaker/Earpiece switching is available in the ChatNova Android app.');
+  }
+};
 
   const closePanel = () => {
     setIncomingCall(null);
