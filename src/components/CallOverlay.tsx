@@ -9,8 +9,9 @@ import {
   VideoOff,
   AlertCircle,
   X,
-  Camera,
-  Volume2
+   Camera,
+  Volume2,
+  Headphones
 } from 'lucide-react';
 import {
   webrtcCallService,
