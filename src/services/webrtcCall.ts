@@ -1,5 +1,9 @@
 
 import { wsService } from './websocket';
+import {
+  setNativeCallSpeaker,
+  resetNativeCallAudio
+} from './nativeAudio';
 
 type CallRole = 'caller' | 'callee';
 export type CallType = 'voice' | 'video';
@@ -205,6 +209,10 @@ class WebRTCCallService {
       return;
     }
 
+    // Voice call: earpiece by default.
+    // Video call: loudspeaker by default.
+    await setNativeCallSpeaker(type === 'video');
+
     const peer = this.createPeerConnection();
 
     this.activeCall.localStream = stream;
@@ -215,6 +223,11 @@ class WebRTCCallService {
     });
 
     this.onLocalStream?.(stream);
+  }
+
+  async setSpeakerEnabled(enabled: boolean): Promise<boolean> {
+    if (!this.activeCall) return false;
+    return setNativeCallSpeaker(enabled);
   }
 
   async startOutgoingCall(
@@ -473,6 +486,7 @@ class WebRTCCallService {
       return false;
     }
   }
+
   setRemoteVolume(volume: number): void {
     const safeVolume = Math.max(0, Math.min(1, volume));
 
@@ -484,6 +498,7 @@ class WebRTCCallService {
   getRemoteVolume(): number {
     return this.remoteAudio?.volume ?? 1;
   }
+
   toggleMicrophone(): boolean {
     const tracks = this.activeCall?.localStream?.getAudioTracks() || [];
 
@@ -561,6 +576,8 @@ class WebRTCCallService {
     }
 
     this.activeCall = null;
+
+    void resetNativeCallAudio();
   }
 
   isInCall(): boolean {
