@@ -43,6 +43,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [cameraEnabled, setCameraEnabled] = useState(true);
   const [currentType, setCurrentType] = useState<CallType>('voice');
   const [callVolume, setCallVolume] = useState(1);
+  const [speakerEnabled, setSpeakerEnabled] = useState(false);
 
 useEffect(() => {
   webrtcCallService.setRemoteVolume(callVolume);
