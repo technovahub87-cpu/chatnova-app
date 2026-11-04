@@ -482,7 +482,14 @@ useEffect(() => {
                 >
                   {cameraEnabled ? <Video className="w-6 h-6" /> : <VideoOff className="w-6 h-6" />}
                 </button>
-
+<button
+  type="button"
+  onClick={toggleSpeaker}
+  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-white/20'}`}
+  title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
+>
+  {speakerEnabled ? <Volume2 className="w-6 h-6" /> : <Headphones className="w-6 h-6" />}
+</button>
                 <button
                   type="button"
                   onClick={endCall}
