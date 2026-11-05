@@ -1,5 +1,6 @@
-
 import React, { useEffect, useState } from 'react';
+import { Capacitor } from '@capacitor/core';
+import { PushNotifications } from '@capacitor/push-notifications';
 
 import { BackendDashboard } from './components/BackendDashboard';
 import { MasterAdminPanel } from './components/MasterAdminPanel';
@@ -11,7 +12,8 @@ import { wsService } from './services/websocket';
 import {
   authAPI,
   getAuthToken,
-  removeAuthToken
+  removeAuthToken,
+  API_BASE_URL
 } from './services/api';
 
 import { ThemeProvider } from './context/ThemeContext';
@@ -22,6 +24,7 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
 
+  // Restore existing login session
   useEffect(() => {
     let cancelled = false;
 
@@ -94,6 +97,7 @@ function AppContent() {
     };
   }, []);
 
+  // Connect WebSocket after login
   useEffect(() => {
     if (!currentUser) {
       wsService.disconnect();
@@ -111,6 +115,159 @@ function AppContent() {
 
     return () => {
       wsService.disconnect();
+    };
+  }, [currentUser?.id]);
+
+  // Register Android device for Firebase push notifications
+  useEffect(() => {
+    if (!currentUser || Capacitor.getPlatform() !== 'android') {
+      return;
+    }
+
+    let cancelled = false;
+    const listeners: Array<{ remove: () => Promise<void> }> = [];
+
+    const setupPushNotifications = async () => {
+      try {
+        // Create the channel used by the backend FCM sender
+        await PushNotifications.createChannel({
+          id: 'chatnova_messages',
+          name: 'ChatNova Messages',
+          description: 'New ChatNova message notifications',
+          importance: 5,
+          visibility: 1,
+          vibration: true
+        });
+
+        // Receive the FCM device token
+        const registrationListener =
+          await PushNotifications.addListener(
+            'registration',
+            async (token) => {
+              if (cancelled) return;
+
+              const authToken = getAuthToken();
+
+              if (!authToken || !token.value) return;
+
+              try {
+                const response = await fetch(
+                  `${API_BASE_URL}/auth/push-token`,
+                  {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${authToken}`
+                    },
+                    body: JSON.stringify({
+                      token: token.value,
+                      platform: 'android',
+                      deviceName: 'Android Device'
+                    })
+                  }
+                );
+
+                const result = await response.json().catch(() => ({}));
+
+                if (response.ok && result.success) {
+                  console.log(
+                    '[ChatNova] Push device registered successfully.'
+                  );
+                } else {
+                  console.error(
+                    '[ChatNova] Push token registration failed:',
+                    result.message
+                  );
+                }
+              } catch (error) {
+                console.error(
+                  '[ChatNova] Push token API error:',
+                  error
+                );
+              }
+            }
+          );
+
+        listeners.push(registrationListener);
+
+        const errorListener =
+          await PushNotifications.addListener(
+            'registrationError',
+            (error) => {
+              console.error(
+                '[ChatNova] Push registration error:',
+                error
+              );
+            }
+          );
+
+        listeners.push(errorListener);
+
+        const notificationListener =
+          await PushNotifications.addListener(
+            'pushNotificationReceived',
+            (notification) => {
+              console.log(
+                '[ChatNova] Push notification received:',
+                notification.title
+              );
+            }
+          );
+
+        listeners.push(notificationListener);
+
+        const actionListener =
+          await PushNotifications.addListener(
+            'pushNotificationActionPerformed',
+            (action) => {
+              console.log(
+                '[ChatNova] Notification opened:',
+                action.notification.data
+              );
+            }
+          );
+
+        listeners.push(actionListener);
+
+        if (cancelled) return;
+
+        // Check and request Android notification permission
+        let permission =
+          await PushNotifications.checkPermissions();
+
+        if (permission.receive === 'prompt') {
+          permission = await PushNotifications.requestPermissions();
+        }
+
+        if (permission.receive !== 'granted') {
+          console.warn(
+            '[ChatNova] Notification permission was not granted.'
+          );
+          return;
+        }
+
+        // Register this Android device with Firebase
+        await PushNotifications.register();
+
+        console.log(
+          '[ChatNova] Firebase push registration started.'
+        );
+      } catch (error) {
+        console.error(
+          '[ChatNova] Push notification setup failed:',
+          error
+        );
+      }
+    };
+
+    setupPushNotifications();
+
+    return () => {
+      cancelled = true;
+
+      listeners.forEach((listener) => {
+        listener.remove().catch(console.error);
+      });
     };
   }, [currentUser?.id]);
 
