@@ -69,7 +69,7 @@ jobs:
           fi
 
       - name: Build Debug APK
-             - run: |
+        run: |
           cd android
           echo "===== ANDROID MANIFEST CONTENT ====="
           nl -ba app/src/main/AndroidManifest.xml
