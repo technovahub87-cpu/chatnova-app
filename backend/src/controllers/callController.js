@@ -1,3 +1,4 @@
+
 const mongoose = require('mongoose');
 const Call = require('../models/Call');
 const Conversation = require('../models/Conversation');
@@ -67,6 +68,73 @@ const getCallHistory = async (req, res) => {
   }
 };
 
+// Fetch Metered ICE servers using the private backend environment variable.
+const getTurnIceServers = async (req, res) => {
+  try {
+    const appName = String(process.env.METERED_APP_NAME || '')
+      .trim();
+
+    const apiKey = String(process.env.METERED_API_KEY || '')
+      .trim();
+
+    if (!appName || !apiKey) {
+      return res.status(503).json({
+        success: false,
+        message: 'TURN service is not configured.'
+      });
+    }
+
+    const url = new URL(
+      `https://${appName}.metered.live/api/v1/turn/credentials`
+    );
+
+    url.searchParams.set('apiKey', apiKey);
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { Accept: 'application/json' },
+      signal: AbortSignal.timeout(10000)
+    });
+
+    if (!response.ok) {
+      console.error(
+        '[ChatNova TURN] Metered returned status:',
+        response.status
+      );
+
+      return res.status(502).json({
+        success: false,
+        message: 'Unable to retrieve TURN server details.'
+      });
+    }
+
+    const iceServers = await response.json();
+
+    if (!Array.isArray(iceServers) || iceServers.length === 0) {
+      return res.status(502).json({
+        success: false,
+        message: 'Metered returned an invalid ICE server list.'
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      iceServers
+    });
+  } catch (error) {
+    console.error(
+      '[ChatNova TURN Error]:',
+      error instanceof Error ? error.message : String(error)
+    );
+
+    return res.status(502).json({
+      success: false,
+      message: 'TURN service is temporarily unavailable.'
+    });
+  }
+};
+
 module.exports = {
-  getCallHistory
+  getCallHistory,
+  getTurnIceServers
 };
