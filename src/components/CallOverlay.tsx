@@ -1,3 +1,4 @@
+
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Phone,
@@ -7,10 +8,10 @@ import {
   Video,
   VideoOff,
   AlertCircle,
-  X,
   Camera,
   Volume2,
-  Headphones
+  Headphones,
+  X
 } from 'lucide-react';
 import {
   webrtcCallService,
@@ -43,6 +44,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const [currentType, setCurrentType] = useState<CallType>('voice');
   const [callVolume, setCallVolume] = useState(1);
   const [speakerEnabled, setSpeakerEnabled] = useState(false);
+  const [volumePanelOpen, setVolumePanelOpen] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -142,6 +144,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       setCallStatus('incoming');
       setError('');
       setBusy(false);
+      setVolumePanelOpen(false);
     };
 
     webrtcCallService.onCallStatus = (status) => {
@@ -165,6 +168,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
         setBusy(false);
         setLocalStream(null);
         setRemoteStream(null);
+        setVolumePanelOpen(false);
       }
     };
 
@@ -224,6 +228,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     setBusy(true);
     setMicEnabled(true);
     setCameraEnabled(true);
+    setVolumePanelOpen(false);
 
     webrtcCallService.startOutgoingCall(
       request.conversationId,
@@ -270,6 +275,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     setIncomingCall(null);
     setCallStatus('');
     setBusy(false);
+    setVolumePanelOpen(false);
   };
 
   const endCall = async () => {
@@ -285,6 +291,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       setRemoteStream(null);
       setCallStatus('ended');
       setBusy(false);
+      setVolumePanelOpen(false);
     }
   };
 
@@ -309,9 +316,13 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       setError('');
     } else {
       setError(
-        'Speaker/Earpiece switching is available in the ChatNova Android app.'
+        'Unable to change audio route on this device. Please check Android audio permissions.'
       );
     }
+  };
+
+  const toggleVolumePanel = () => {
+    setVolumePanelOpen((previous) => !previous);
   };
 
   const closePanel = () => {
@@ -321,6 +332,7 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     setBusy(false);
     setLocalStream(null);
     setRemoteStream(null);
+    setVolumePanelOpen(false);
     handledRequestRef.current = null;
   };
 
@@ -352,8 +364,41 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
   const isVideo = currentType === 'video';
   const isActive = webrtcCallService.isInCall();
 
+  const volumeControl = (
+    <div className="absolute right-4 top-16 z-50 w-64 rounded-2xl border border-white/15 bg-[#14212b]/95 p-4 shadow-2xl backdrop-blur-md">
+      <div className="mb-3 flex items-center justify-between text-sm">
+        <span className="font-medium">Call Volume</span>
+        <span className="font-semibold text-cyan-300">
+          {Math.round(callVolume * 100)}%
+        </span>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <Volume2 className="h-5 w-5 shrink-0 text-cyan-300" />
+        <input
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={callVolume}
+          onChange={(e) => setCallVolume(Number(e.target.value))}
+          className="w-full accent-cyan-400"
+          aria-label="Call volume"
+        />
+      </div>
+
+      <button
+        type="button"
+        onClick={() => setVolumePanelOpen(false)}
+        className="mt-3 w-full rounded-lg bg-white/10 py-2 text-xs text-slate-200"
+      >
+        Close
+      </button>
+    </div>
+  );
+
   return (
-    <div className="fixed inset-0 z-[100] w-screen h-[100dvh] bg-[#050b12] text-white overflow-hidden">
+    <div className="fixed inset-0 z-[100] h-[100dvh] w-screen overflow-hidden bg-[#050b12] text-white">
 
       {isVideo ? (
         <div className="absolute inset-0 bg-black">
@@ -363,32 +408,32 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
               ref={remoteVideoRef}
               autoPlay
               playsInline
-              className="absolute inset-0 w-full h-full object-cover"
+              className="absolute inset-0 h-full w-full object-cover"
             />
           ) : (
-            <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-5 bg-[#101d29]">
-              <div className="w-28 h-28 rounded-full bg-cyan-500/15 border border-cyan-500/30 flex items-center justify-center mb-5">
-                <Camera className="w-12 h-12 text-cyan-400" />
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-[#101d29] p-5 text-center">
+              <div className="mb-5 flex h-28 w-28 items-center justify-center rounded-full border border-cyan-500/30 bg-cyan-500/15">
+                <Camera className="h-12 w-12 text-cyan-400" />
               </div>
 
               <h2 className="text-2xl font-bold">
                 {incomingCall?.caller?.displayName || 'ChatNova Contact'}
               </h2>
 
-              <p className="text-sm text-slate-300 mt-3">
+              <p className="mt-3 text-sm text-slate-300">
                 {statusText[callStatus] || 'Waiting for video...'}
               </p>
             </div>
           )}
 
           {localStream && (
-            <div className="absolute top-20 right-3 sm:top-6 sm:right-6 w-28 sm:w-44 aspect-[3/4] rounded-2xl overflow-hidden border-2 border-white/60 shadow-2xl bg-slate-900 z-20">
+            <div className="absolute right-3 top-20 z-20 aspect-[3/4] w-28 overflow-hidden rounded-2xl border-2 border-white/60 bg-slate-900 shadow-2xl sm:right-6 sm:top-6 sm:w-44">
               <video
                 ref={localVideoRef}
                 autoPlay
                 playsInline
                 muted
-                className="w-full h-full object-cover scale-x-[-1]"
+                className="h-full w-full scale-x-[-1] object-cover"
               />
 
               {!cameraEnabled && (
@@ -399,10 +444,10 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             </div>
           )}
 
-          <div className="absolute top-0 inset-x-0 z-30 px-4 pt-[max(env(safe-area-inset-top),16px)] pb-5 bg-gradient-to-b from-black/80 to-transparent">
+          <div className="absolute inset-x-0 top-0 z-30 bg-gradient-to-b from-black/80 to-transparent px-4 pb-5 pt-[max(env(safe-area-inset-top),16px)]">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <Video className="w-5 h-5 text-cyan-400" />
+                <Video className="h-5 w-5 text-cyan-400" />
                 <div>
                   <div className="font-bold">ChatNova Video Call</div>
                   <div className="text-xs text-slate-200">
@@ -411,41 +456,33 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                 </div>
               </div>
 
-              {callStatus === 'connected' && (
-                <span className="px-3 py-1 rounded-full bg-emerald-500/80 text-white text-xs">
-                  Connected
-                </span>
-              )}
+              <div className="flex items-center gap-3">
+                {callStatus === 'connected' && (
+                  <span className="rounded-full bg-emerald-500/80 px-3 py-1 text-xs text-white">
+                    Connected
+                  </span>
+                )}
+
+                <button
+                  type="button"
+                  onClick={toggleVolumePanel}
+                  className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
+                  title="Call volume"
+                  aria-label="Open call volume"
+                >
+                  <Volume2 className="h-5 w-5 text-white" />
+                </button>
+              </div>
             </div>
           </div>
 
-          <div className="absolute bottom-0 inset-x-0 z-30 pt-12 pb-[max(env(safe-area-inset-bottom),20px)] bg-gradient-to-t from-black/90 via-black/50 to-transparent">
-            {error && (
-              <div className="mx-4 mb-4 p-3 rounded-xl bg-rose-500/20 border border-rose-400/40 text-rose-200 text-xs flex gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>{error}</span>
-              </div>
-            )}
+          {volumePanelOpen && volumeControl}
 
-            {isActive && (
-              <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span>Call Volume</span>
-                  <span>{Math.round(callVolume * 100)}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Volume2 className="h-5 w-5 shrink-0" />
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={callVolume}
-                    onChange={(e) => setCallVolume(Number(e.target.value))}
-                    className="w-full accent-cyan-400"
-                    aria-label="Call volume"
-                  />
-                </div>
+          <div className="absolute inset-x-0 bottom-0 z-30 bg-gradient-to-t from-black/90 via-black/50 to-transparent pb-[max(env(safe-area-inset-bottom),20px)] pt-12">
+            {error && (
+              <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-rose-400/40 bg-rose-500/20 p-3 text-xs text-rose-200">
+                <AlertCircle className="h-4 w-4 shrink-0" />
+                <span>{error}</span>
               </div>
             )}
 
@@ -455,9 +492,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   type="button"
                   onClick={rejectCall}
                   disabled={busy}
-                  className="w-16 h-16 rounded-full bg-rose-600 flex flex-col items-center justify-center gap-1 disabled:opacity-50"
+                  className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-full bg-rose-600 disabled:opacity-50"
                 >
-                  <PhoneOff className="w-6 h-6" />
+                  <PhoneOff className="h-6 w-6" />
                   <span className="text-[10px]">Reject</span>
                 </button>
 
@@ -465,9 +502,9 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   type="button"
                   onClick={acceptCall}
                   disabled={busy}
-                  className="w-16 h-16 rounded-full bg-emerald-600 flex flex-col items-center justify-center gap-1 disabled:opacity-50"
+                  className="flex h-16 w-16 flex-col items-center justify-center gap-1 rounded-full bg-emerald-600 disabled:opacity-50"
                 >
-                  <Phone className="w-6 h-6" />
+                  <Phone className="h-6 w-6" />
                   <span className="text-[10px]">
                     {busy ? 'Wait' : 'Accept'}
                   </span>
@@ -478,50 +515,50 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                 <button
                   type="button"
                   onClick={toggleMic}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full ${micEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
                   title={micEnabled ? 'Mute microphone' : 'Unmute microphone'}
                 >
                   {micEnabled
-                    ? <Mic className="w-6 h-6" />
-                    : <MicOff className="w-6 h-6" />}
+                    ? <Mic className="h-6 w-6" />
+                    : <MicOff className="h-6 w-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={toggleCamera}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center ${cameraEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full ${cameraEnabled ? 'bg-white/20' : 'bg-rose-600'}`}
                   title={cameraEnabled ? 'Turn camera off' : 'Turn camera on'}
                 >
                   {cameraEnabled
-                    ? <Video className="w-6 h-6" />
-                    : <VideoOff className="w-6 h-6" />}
+                    ? <Video className="h-6 w-6" />
+                    : <VideoOff className="h-6 w-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={toggleSpeaker}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-white/20'}`}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full ${speakerEnabled ? 'bg-cyan-600' : 'bg-white/20'}`}
                   title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
                 >
                   {speakerEnabled
-                    ? <Volume2 className="w-6 h-6" />
-                    : <Headphones className="w-6 h-6" />}
+                    ? <Volume2 className="h-6 w-6" />
+                    : <Headphones className="h-6 w-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={endCall}
-                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-600"
                   title="End call"
                 >
-                  <PhoneOff className="w-7 h-7" />
+                  <PhoneOff className="h-7 w-7" />
                 </button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={closePanel}
-                className="mx-auto block px-8 py-3 rounded-full bg-slate-700"
+                className="mx-auto block rounded-full bg-slate-700 px-8 py-3"
               >
                 Close
               </button>
@@ -531,20 +568,31 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
       ) : (
         <div className="absolute inset-0 flex flex-col items-center justify-between bg-gradient-to-b from-[#14212b] to-[#071018]">
 
-          <div className="w-full flex items-center justify-between p-5 pt-[max(env(safe-area-inset-top),20px)]">
+          <div className="relative flex w-full items-center justify-between p-5 pt-[max(env(safe-area-inset-top),20px)]">
             <div className="flex items-center gap-3">
-              <Phone className="w-5 h-5 text-emerald-400" />
+              <Phone className="h-5 w-5 text-emerald-400" />
               <div>
                 <div className="font-bold">ChatNova</div>
                 <div className="text-xs text-slate-400">Voice Call</div>
               </div>
             </div>
-            <Volume2 className="w-5 h-5 text-slate-400" />
+
+            <button
+              type="button"
+              onClick={toggleVolumePanel}
+              className="flex h-10 w-10 items-center justify-center rounded-full bg-white/10"
+              title="Call volume"
+              aria-label="Open call volume"
+            >
+              <Volume2 className="h-5 w-5 text-white" />
+            </button>
           </div>
 
-          <div className="flex flex-col items-center text-center px-5">
-            <div className="w-32 h-32 rounded-full bg-emerald-500/15 border border-emerald-500/30 flex items-center justify-center mb-6">
-              <Mic className="w-14 h-14 text-emerald-400" />
+          {volumePanelOpen && volumeControl}
+
+          <div className="flex flex-col items-center px-5 text-center">
+            <div className="mb-6 flex h-32 w-32 items-center justify-center rounded-full border border-emerald-500/30 bg-emerald-500/15">
+              <Mic className="h-14 w-14 text-emerald-400" />
             </div>
 
             <h2 className="text-2xl font-bold">
@@ -552,43 +600,21 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
             </h2>
 
             {incomingCall?.caller?.customId && (
-              <p className="text-sm text-slate-400 mt-2">
+              <p className="mt-2 text-sm text-slate-400">
                 {incomingCall.caller.customId}
               </p>
             )}
 
-            <p className="text-emerald-400 mt-4">
+            <p className="mt-4 text-emerald-400">
               {statusText[callStatus] || 'Voice Call'}
             </p>
           </div>
 
           <div className="w-full pb-[max(env(safe-area-inset-bottom),24px)]">
             {error && (
-              <div className="mx-4 mb-4 p-3 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex gap-2">
-                <AlertCircle className="w-4 h-4 shrink-0" />
+              <div className="mx-4 mb-4 flex gap-2 rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 text-xs text-rose-300">
+                <AlertCircle className="h-4 w-4 shrink-0" />
                 <span>{error}</span>
-              </div>
-            )}
-
-            {isActive && (
-              <div className="mx-auto mb-5 w-64 rounded-2xl bg-black/50 p-3">
-                <div className="mb-2 flex items-center justify-between text-xs">
-                  <span>Call Volume</span>
-                  <span>{Math.round(callVolume * 100)}%</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <Volume2 className="h-5 w-5 shrink-0" />
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.05"
-                    value={callVolume}
-                    onChange={(e) => setCallVolume(Number(e.target.value))}
-                    className="w-full accent-cyan-400"
-                    aria-label="Call volume"
-                  />
-                </div>
               </div>
             )}
 
@@ -598,18 +624,18 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                   type="button"
                   onClick={rejectCall}
                   disabled={busy}
-                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center disabled:opacity-50"
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-600 disabled:opacity-50"
                 >
-                  <PhoneOff className="w-7 h-7" />
+                  <PhoneOff className="h-7 w-7" />
                 </button>
 
                 <button
                   type="button"
                   onClick={acceptCall}
                   disabled={busy}
-                  className="w-16 h-16 rounded-full bg-emerald-600 flex items-center justify-center disabled:opacity-50"
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-emerald-600 disabled:opacity-50"
                 >
-                  <Phone className="w-7 h-7" />
+                  <Phone className="h-7 w-7" />
                 </button>
               </div>
             ) : isActive ? (
@@ -617,38 +643,38 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
                 <button
                   type="button"
                   onClick={toggleMic}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center ${micEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full ${micEnabled ? 'bg-slate-700' : 'bg-rose-600'}`}
                 >
                   {micEnabled
-                    ? <Mic className="w-6 h-6" />
-                    : <MicOff className="w-6 h-6" />}
+                    ? <Mic className="h-6 w-6" />
+                    : <MicOff className="h-6 w-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={toggleSpeaker}
-                  className={`w-14 h-14 rounded-full flex items-center justify-center ${speakerEnabled ? 'bg-cyan-600' : 'bg-slate-700'}`}
+                  className={`flex h-14 w-14 items-center justify-center rounded-full ${speakerEnabled ? 'bg-cyan-600' : 'bg-slate-700'}`}
                   title={speakerEnabled ? 'Switch to earpiece' : 'Switch to speaker'}
                 >
                   {speakerEnabled
-                    ? <Volume2 className="w-6 h-6" />
-                    : <Headphones className="w-6 h-6" />}
+                    ? <Volume2 className="h-6 w-6" />
+                    : <Headphones className="h-6 w-6" />}
                 </button>
 
                 <button
                   type="button"
                   onClick={endCall}
-                  className="w-16 h-16 rounded-full bg-rose-600 flex items-center justify-center"
+                  className="flex h-16 w-16 items-center justify-center rounded-full bg-rose-600"
                   title="End call"
                 >
-                  <PhoneOff className="w-7 h-7" />
+                  <PhoneOff className="h-7 w-7" />
                 </button>
               </div>
             ) : (
               <button
                 type="button"
                 onClick={closePanel}
-                className="mx-auto block px-8 py-3 rounded-full bg-slate-700"
+                className="mx-auto block rounded-full bg-slate-700 px-8 py-3"
               >
                 Close
               </button>
