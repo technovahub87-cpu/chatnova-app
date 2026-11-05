@@ -4,6 +4,7 @@ import {
   setNativeCallSpeaker,
   resetNativeCallAudio
 } from './nativeAudio';
+import { API_BASE_URL, getAuthToken } from './api';
 
 type CallRole = 'caller' | 'callee';
 export type CallType = 'voice' | 'video';
@@ -28,6 +29,11 @@ class WebRTCCallService {
   private remoteAudio: HTMLAudioElement | null = null;
   private initialized = false;
   private selectedAudioOutput = '';
+
+  // TURN server cache: refresh every 30 minutes.
+  private iceServersCache: RTCIceServer[] | null = null;
+  private iceServersCacheAt = 0;
+  private readonly iceServersCacheDuration = 30 * 60 * 1000;
 
   // Allow temporary network interruptions to recover.
   private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -94,6 +100,53 @@ class WebRTCCallService {
     });
   }
 
+  // Fetch Metered TURN credentials securely through the backend.
+  private async getIceServers(): Promise<RTCIceServer[]> {
+    if (
+      this.iceServersCache &&
+      Date.now() - this.iceServersCacheAt < this.iceServersCacheDuration
+    ) {
+      return this.iceServersCache;
+    }
+
+    const token = getAuthToken();
+
+    if (!token) {
+      throw new Error('Please log in again to connect calls.');
+    }
+
+    const response = await fetch(
+      `${API_BASE_URL}/calls/turn-ice-servers`,
+      {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          Accept: 'application/json'
+        },
+        credentials: 'include',
+        signal: AbortSignal.timeout(12000)
+      }
+    );
+
+    const result = await response.json().catch(() => ({}));
+
+    if (
+      !response.ok ||
+      result.success !== true ||
+      !Array.isArray(result.iceServers) ||
+      result.iceServers.length === 0
+    ) {
+      throw new Error(
+        result.message || 'Unable to load call network settings.'
+      );
+    }
+
+    this.iceServersCache = result.iceServers as RTCIceServer[];
+    this.iceServersCacheAt = Date.now();
+
+    return this.iceServersCache;
+  }
+
   private clearRecoveryTimer(): void {
     if (this.recoveryTimer) {
       clearTimeout(this.recoveryTimer);
@@ -113,9 +166,7 @@ class WebRTCCallService {
     }
 
     if (state === 'disconnected' || state === 'failed') {
-      // Do not interrupt the call immediately.
       this.onCallStatus?.('reconnecting');
-
       this.clearRecoveryTimer();
 
       this.recoveryTimer = setTimeout(() => {
@@ -143,7 +194,9 @@ class WebRTCCallService {
 
   private async getCallMedia(type: CallType): Promise<MediaStream> {
     if (!navigator.mediaDevices?.getUserMedia) {
-      throw new Error('Camera and microphone are not supported by this browser.');
+      throw new Error(
+        'Camera and microphone are not supported by this browser.'
+      );
     }
 
     try {
@@ -165,26 +218,32 @@ class WebRTCCallService {
     } catch (error: any) {
       if (type === 'video') {
         if (error?.name === 'NotAllowedError') {
-          throw new Error('Camera or microphone permission denied. Please allow both permissions.');
+          throw new Error(
+            'Camera or microphone permission denied. Please allow both permissions.'
+          );
         }
 
         if (error?.name === 'NotFoundError') {
-          throw new Error('Camera or microphone not found on this device.');
+          throw new Error(
+            'Camera or microphone not found on this device.'
+          );
         }
 
-        throw new Error(error?.message || 'Unable to access camera and microphone.');
+        throw new Error(
+          error?.message || 'Unable to access camera and microphone.'
+        );
       }
 
       throw new Error(error?.message || 'Unable to access microphone.');
     }
   }
 
-  private createPeerConnection(): RTCPeerConnection {
+  private createPeerConnection(
+    iceServers: RTCIceServer[]
+  ): RTCPeerConnection {
     const peer = new RTCPeerConnection({
-      iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' }
-      ]
+      iceServers,
+      iceCandidatePoolSize: 10
     });
 
     peer.onicecandidate = (event) => {
@@ -214,11 +273,14 @@ class WebRTCCallService {
         this.remoteAudio.srcObject = stream;
 
         if (this.selectedAudioOutput) {
-          this.applyAudioOutput(this.selectedAudioOutput);
+          void this.applyAudioOutput(this.selectedAudioOutput);
         }
 
         this.remoteAudio.play().catch((error) => {
-          console.warn('[ChatNova Call] Audio playback needs user interaction:', error);
+          console.warn(
+            '[ChatNova Call] Audio playback needs user interaction:',
+            error
+          );
         });
       }
     };
@@ -241,11 +303,39 @@ class WebRTCCallService {
       return;
     }
 
+    let iceServers: RTCIceServer[];
+
+    try {
+      iceServers = await this.getIceServers();
+      console.info('[ChatNova Call] Metered TURN servers loaded.');
+    } catch (error) {
+      console.error(
+        '[ChatNova Call] TURN server unavailable; using STUN fallback:',
+        error
+      );
+
+      // Keep direct connections available if TURN cannot be reached.
+      iceServers = [
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:stun1.l.google.com:19302' }
+      ];
+    }
+
+    if (!this.activeCall) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
     // Voice call: earpiece by default.
     // Video call: loudspeaker by default.
     await setNativeCallSpeaker(type === 'video');
 
-    const peer = this.createPeerConnection();
+    if (!this.activeCall) {
+      stream.getTracks().forEach((track) => track.stop());
+      return;
+    }
+
+    const peer = this.createPeerConnection(iceServers);
 
     this.activeCall.localStream = stream;
     this.activeCall.peer = peer;
@@ -267,7 +357,9 @@ class WebRTCCallService {
     type: CallType = 'voice'
   ): Promise<void> {
     if (!wsService.isConnected()) {
-      throw new Error('ChatNova server is not connected. Please try again.');
+      throw new Error(
+        'ChatNova server is not connected. Please try again.'
+      );
     }
 
     if (this.activeCall) {
@@ -327,7 +419,9 @@ class WebRTCCallService {
       this.onCallStatus?.('connecting');
     } catch (error: any) {
       this.cleanup();
-      throw new Error(error?.message || 'Could not access your camera or microphone.');
+      throw new Error(
+        error?.message || 'Could not access your camera or microphone.'
+      );
     }
   }
 
@@ -364,7 +458,9 @@ class WebRTCCallService {
         }
       });
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not start the call connection.');
+      this.onCallError?.(
+        error?.message || 'Could not start the call connection.'
+      );
       await this.endCall();
     }
   }
@@ -397,7 +493,9 @@ class WebRTCCallService {
         }
       });
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not answer the call.');
+      this.onCallError?.(
+        error?.message || 'Could not answer the call.'
+      );
       await this.endCall();
     }
   }
@@ -419,7 +517,9 @@ class WebRTCCallService {
 
       await this.applyPendingCandidates();
     } catch (error: any) {
-      this.onCallError?.(error?.message || 'Could not connect the call.');
+      this.onCallError?.(
+        error?.message || 'Could not connect the call.'
+      );
       await this.endCall();
     }
   }
@@ -455,7 +555,10 @@ class WebRTCCallService {
           new RTCIceCandidate(candidate)
         );
       } catch (error) {
-        console.warn('[ChatNova Call] Pending ICE candidate error:', error);
+        console.warn(
+          '[ChatNova Call] Pending ICE candidate error:',
+          error
+        );
       }
     }
   }
@@ -468,14 +571,19 @@ class WebRTCCallService {
     };
 
     if (typeof audio.setSinkId !== 'function') {
-      console.warn('[ChatNova Call] Audio output selection is not supported on this device.');
+      console.warn(
+        '[ChatNova Call] Audio output selection is not supported on this device.'
+      );
       return;
     }
 
     try {
       await audio.setSinkId(deviceId);
     } catch (error) {
-      console.warn('[ChatNova Call] Could not change audio output:', error);
+      console.warn(
+        '[ChatNova Call] Could not change audio output:',
+        error
+      );
     }
   }
 
@@ -492,7 +600,10 @@ class WebRTCCallService {
           label: device.label || `Audio output ${index + 1}`
         }));
     } catch (error) {
-      console.warn('[ChatNova Call] Could not list audio outputs:', error);
+      console.warn(
+        '[ChatNova Call] Could not list audio outputs:',
+        error
+      );
       return [];
     }
   }
@@ -514,7 +625,10 @@ class WebRTCCallService {
       await audio.setSinkId(deviceId);
       return true;
     } catch (error) {
-      console.warn('[ChatNova Call] Audio output change failed:', error);
+      console.warn(
+        '[ChatNova Call] Audio output change failed:',
+        error
+      );
       return false;
     }
   }
@@ -537,6 +651,7 @@ class WebRTCCallService {
     if (!tracks.length) return false;
 
     const nextEnabled = !tracks[0].enabled;
+
     tracks.forEach((track) => {
       track.enabled = nextEnabled;
     });
@@ -550,6 +665,7 @@ class WebRTCCallService {
     if (!tracks.length) return false;
 
     const nextEnabled = !tracks[0].enabled;
+
     tracks.forEach((track) => {
       track.enabled = nextEnabled;
     });
