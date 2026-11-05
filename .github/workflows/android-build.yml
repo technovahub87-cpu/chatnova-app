@@ -69,8 +69,13 @@ jobs:
           fi
 
       - name: Build Debug APK
-        run: |
+             - run: |
           cd android
+          echo "===== ANDROID MANIFEST CONTENT ====="
+          nl -ba app/src/main/AndroidManifest.xml
+          echo "===== XML DECLARATION LOCATIONS ====="
+          grep -n '<?xml' app/src/main/AndroidManifest.xml || true
+          echo "===== BUILD START ====="
           chmod +x gradlew
           ./gradlew assembleDebug --stacktrace
 
