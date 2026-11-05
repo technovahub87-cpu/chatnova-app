@@ -5,6 +5,10 @@ import {
   resetNativeCallAudio
 } from './nativeAudio';
 import { API_BASE_URL, getAuthToken } from './api';
+import {
+  playIncomingRingtone,
+  stopIncomingRingtone
+} from './ringtonePicker';
 
 type CallRole = 'caller' | 'callee';
 export type CallType = 'voice' | 'video';
@@ -49,9 +53,10 @@ class WebRTCCallService {
     if (this.initialized) return;
     this.initialized = true;
 
-    wsService.on('call:incoming', (data) => {
-      this.onIncomingCall?.(data);
-    });
+   wsService.on('call:incoming', (data) => {
+  void playIncomingRingtone();
+  this.onIncomingCall?.(data);
+});
 
     wsService.on('call:accepted', async (data) => {
       if (!this.activeCall || data.callId !== this.activeCall.callId) return;
@@ -88,8 +93,9 @@ class WebRTCCallService {
     });
 
     wsService.on('call:missed', (data) => {
-      this.onCallStatus?.('missed', data);
-    });
+  void stopIncomingRingtone();
+  this.onCallStatus?.('missed', data);
+});
 
     wsService.on('call:error', (data) => {
       this.onCallError?.(data?.message || 'Call failed.');
@@ -392,6 +398,7 @@ class WebRTCCallService {
     conversationId: string,
     type: CallType = 'voice'
   ): Promise<void> {
+    void stopIncomingRingtone();
     if (!wsService.isConnected()) {
       throw new Error('ChatNova server is not connected.');
     }
@@ -425,12 +432,14 @@ class WebRTCCallService {
     }
   }
 
-  rejectIncomingCall(callId: string): void {
-    wsService.emit('call:reject', { callId });
-    this.onCallStatus?.('rejected');
-  }
+ rejectIncomingCall(callId: string): void {
+  void stopIncomingRingtone();
+  wsService.emit('call:reject', { callId });
+  this.onCallStatus?.('rejected');
+}
 
   async endCall(): Promise<void> {
+    void stopIncomingRingtone();
     if (!this.activeCall) return;
 
     const callId = this.activeCall.callId;
@@ -690,6 +699,7 @@ class WebRTCCallService {
   }
 
   private finishLocalCall(status: string, data?: any): void {
+    void stopIncomingRingtone();
     if (
       data?.callId &&
       this.activeCall &&
@@ -699,6 +709,7 @@ class WebRTCCallService {
     }
 
     this.cleanup();
+    void stopIncomingRingtone();
     this.onCallStatus?.(status, data);
   }
 
