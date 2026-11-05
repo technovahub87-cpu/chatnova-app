@@ -149,7 +149,11 @@ const handleBlockToggle = async () => {
 
   try {
     if (isBlocked) {
-      const result = await blockedUserAPI.unblock(blockedUserRecordId);
+  if (!blockedUserRecordId) {
+    window.alert('Blocked user record nahi mila.');
+    return;
+  }
+  const result = await blockedUserAPI.unblock(blockedUserRecordId);
 
       if (!result.success) {
         window.alert(result.message || 'Unblock nahi ho paya.');
@@ -825,8 +829,8 @@ const handleForwardToChat = async (target: Chat) => {
             msg.type === 'sticker' &&
             Boolean(msg.media?.url) &&
             (
-              msg.media.url.includes('/attachment') ||
-              msg.media.name?.startsWith('chatnova-sticker-')
+              msg.media?.url?.includes('/attachment') ||
+msg.media?.name?.startsWith('chatnova-sticker-')
             );
 
           return (
