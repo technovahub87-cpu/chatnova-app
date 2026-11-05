@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "959566425460",
+    "project_id": "chatnova-7add5",
+    "storage_bucket": "chatnova-7add5.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:959566425460:android:41710de2a26a9e099b5021",
+        "android_client_info": {
+          "package_name": "com.chatnova.messenger"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBhryJxXaFOkv5FAJCPa2hdpLl9CLaJ-ng"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
