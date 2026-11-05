@@ -3,7 +3,10 @@ const mongoose = require('mongoose');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const PrivacySettings = require('../models/PrivacySettings');
+const NotificationSettings = require('../models/NotificationSettings');
+const PushToken = require('../models/PushToken');
 const { isBlockedBetween } = require('../services/blockService');
+const { sendPushNotification } = require('../services/firebasePush');
 
 const getMessages = async (req, res) => {
   try {
@@ -75,6 +78,118 @@ const getMessages = async (req, res) => {
       success: false,
       message: 'Unable to load messages.'
     });
+  }
+};
+
+// Send FCM notifications without delaying message delivery.
+const notifyMessageRecipients = async ({
+  conversation,
+  message,
+  sender
+}) => {
+  try {
+    const recipients = conversation.participants.filter(
+      participant =>
+        String(participant._id) !== String(sender._id)
+    );
+
+    if (recipients.length === 0) return;
+
+    const settings = await NotificationSettings.find({
+      user: { $in: recipients.map(user => user._id) }
+    }).lean();
+
+    const settingsByUser = new Map(
+      settings.map(item => [String(item.user), item])
+    );
+
+    const enabledRecipients = recipients.filter(user => {
+      const preference = settingsByUser.get(String(user._id));
+
+      if (conversation.type === 'group') {
+        return preference?.groupNotifications !== false;
+      }
+
+      return preference?.messageNotifications !== false;
+    });
+
+    if (enabledRecipients.length === 0) return;
+
+    const tokens = await PushToken.find({
+      user: { $in: enabledRecipients.map(user => user._id) },
+      platform: 'android'
+    }).lean();
+
+    if (tokens.length === 0) return;
+
+    const enabledUserIds = new Set(
+      enabledRecipients.map(user => String(user._id))
+    );
+
+    const senderName =
+      String(sender.displayName || sender.customId || 'Someone').slice(0, 80);
+
+    let preview = 'You have a new message.';
+
+    if (message.type === 'gif') {
+      preview = 'Sent a GIF';
+    } else if (message.type === 'sticker') {
+      preview = 'Sent a sticker';
+    } else {
+      preview = String(message.content || 'You have a new message.')
+        .slice(0, 180);
+    }
+
+    const groupTitle = conversation.groupName
+      ? String(conversation.groupName).slice(0, 80)
+      : 'ChatNova Group';
+
+    const results = await Promise.allSettled(
+      tokens
+        .filter(item => enabledUserIds.has(String(item.user)))
+        .map(async item => {
+          const preference = settingsByUser.get(String(item.user));
+          const showPreview = preference?.messagePreview !== false;
+
+          const result = await sendPushNotification({
+            deviceToken: item.token,
+            title: conversation.type === 'group'
+              ? `${senderName} · ${groupTitle}`
+              : senderName,
+            body: showPreview
+              ? preview
+              : 'You have a new message.',
+            data: {
+              type: 'new_message',
+              conversationId: String(conversation._id),
+              messageId: String(message._id),
+              messageType: String(message.type || 'text')
+            }
+          });
+
+          if (result.invalidToken) {
+            await PushToken.deleteOne({ _id: item._id });
+          }
+
+          return result;
+        })
+    );
+
+    const failed = results.filter(
+      result =>
+        result.status === 'rejected' ||
+        (result.status === 'fulfilled' && !result.value.success)
+    );
+
+    if (failed.length > 0) {
+      console.error(
+        '[FCM Notification Summary]:',
+        failed.length,
+        'notification(s) could not be sent.'
+      );
+    }
+  } catch (error) {
+    console.error('[FCM Recipient Notification Error]:', error.message);
   }
 };
 
@@ -172,7 +287,7 @@ const sendMessage = async (req, res) => {
       _id: conversationId,
       participants: req.user._id,
       isActive: true
-    }).populate('participants', '_id customId');
+    }).populate('participants', '_id customId displayName');
 
     if (!conversation) {
       return res.status(404).json({
@@ -189,23 +304,22 @@ const sendMessage = async (req, res) => {
     const recipient = conversation.type === 'direct'
       ? otherParticipants[0]
       : null;
+
     if (
-  recipient &&
-  await isBlockedBetween(req.user._id, recipient._id)
-) {
-  return res.status(403).json({
-    success: false,
-    message: 'Messaging is unavailable because one of these users has blocked the other.'
-  });
-}
+      recipient &&
+      await isBlockedBetween(req.user._id, recipient._id)
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: 'Messaging is unavailable because one of these users has blocked the other.'
+      });
+    }
 
     const io = req.app.get('io');
 
     let deliveryStatus = 'sent';
     let deliveredAt;
 
-    // A direct message is delivered only when the recipient
-    // currently has an authenticated Socket.IO connection.
     if (io && recipient) {
       try {
         const recipientSockets = await io
@@ -283,6 +397,15 @@ const sendMessage = async (req, res) => {
       }
     }
 
+    // Push notification runs separately; message sending does not wait for FCM.
+    notifyMessageRecipients({
+      conversation,
+      message,
+      sender: req.user
+    }).catch(error => {
+      console.error('[FCM Background Error]:', error.message);
+    });
+
     return res.status(201).json({
       success: true,
       message
@@ -324,7 +447,6 @@ const markMessagesRead = async (req, res) => {
       });
     }
 
-    // Respect the user's Read Receipts privacy setting.
     const privacySettings = await PrivacySettings.findOne({
       user: req.user._id
     }).select('readReceipts');
