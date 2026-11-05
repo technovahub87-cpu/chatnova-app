@@ -389,7 +389,7 @@ export const BackendDashboard: React.FC<BackendDashboardProps> = ({
 
   return (
     <div
-      className={`h-dvh w-dvw flex overflow-hidden box-border pt-[max(env(safe-area-inset-top),24px)] ${
+      className={`h-dvh w-dvw flex overflow-hidden box-border pt-[max(env(safe-area-inset-top),40px)] md:pt-0 ${
         isDark
           ? 'bg-[#0b141a] text-white'
           : 'bg-[#f0f2f5] text-slate-900'
