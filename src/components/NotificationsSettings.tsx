@@ -12,7 +12,8 @@ import {
   Eye,
   Loader2,
   CheckCircle,
-  AlertCircle
+  AlertCircle,
+  Music2
 } from 'lucide-react';
 
 import { useTheme } from '../context/ThemeContext';
@@ -20,6 +21,10 @@ import {
   notificationAPI,
   NotificationSettingsData
 } from '../services/notificationAPI';
+import {
+  RingtonePicker,
+  isNativeRingtonePickerAvailable
+} from '../services/ringtonePicker';
 
 interface NotificationsSettingsProps {
   onClose: () => void;
@@ -99,6 +104,8 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
 
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [ringtoneTitle, setRingtoneTitle] = useState('Default Ringtone');
+  const [ringtoneLoading, setRingtoneLoading] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -131,6 +138,64 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
       active = false;
     };
   }, []);
+
+  useEffect(() => {
+    let active = true;
+
+    const loadRingtone = async () => {
+      if (!isNativeRingtonePickerAvailable()) return;
+
+      try {
+        const result = await RingtonePicker.getSelectedRingtone();
+
+        if (active && result.title) {
+          setRingtoneTitle(result.title);
+        }
+      } catch (error) {
+        console.warn('[ChatNova Ringtone]:', error);
+      }
+    };
+
+    loadRingtone();
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  const handleChooseRingtone = async () => {
+    if (!isNativeRingtonePickerAvailable()) {
+      setErrorMessage(
+        'Ringtone selection is available in the ChatNova Android app.'
+      );
+      return;
+    }
+
+    setRingtoneLoading(true);
+    setSuccessMessage('');
+    setErrorMessage('');
+
+    try {
+      const result = await RingtonePicker.openPicker();
+
+      if (result.cancelled) {
+        setRingtoneLoading(false);
+        return;
+      }
+
+      if (result.title) {
+        setRingtoneTitle(result.title);
+      }
+
+      setSuccessMessage('Ringtone selection saved on this device.');
+    } catch (error: any) {
+      setErrorMessage(
+        error?.message || 'Unable to open the phone ringtone picker.'
+      );
+    }
+
+    setRingtoneLoading(false);
+  };
 
   const handleToggle = async (
     key: keyof NotificationSettingsData
@@ -288,6 +353,42 @@ const NotificationsSettings: React.FC<NotificationsSettingsProps> = ({
                   </div>
                 );
               })}
+
+              <div
+                className={`rounded-xl border p-3 ${
+                  isDark
+                    ? 'bg-[#202c33] border-slate-700'
+                    : 'bg-white border-slate-200'
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10">
+                    <Music2 className="h-5 w-5 text-emerald-500" />
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-semibold">
+                      Choose Ringtone
+                    </p>
+                    <p className="mt-1 break-words text-xs text-slate-400">
+                      Current: {ringtoneTitle}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={handleChooseRingtone}
+                    disabled={ringtoneLoading}
+                    className="shrink-0 rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white disabled:opacity-60"
+                  >
+                    {ringtoneLoading ? (
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                    ) : (
+                      'Choose'
+                    )}
+                  </button>
+                </div>
+              </div>
 
               {successMessage && (
                 <div className="flex min-w-0 items-center gap-2 rounded-xl bg-emerald-500/10 p-3 text-sm text-emerald-500">
