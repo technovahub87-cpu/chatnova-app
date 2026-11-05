@@ -51,6 +51,11 @@ const {
 } = require('../controllers/notificationController');
 
 const {
+  registerPushToken,
+  removePushToken
+} = require('../controllers/pushTokenController');
+
+const {
   getStatuses,
   createStatus,
   markStatusViewed,
@@ -89,6 +94,10 @@ router.put('/privacy', protect, updatePrivacySettings);
 // Notification settings
 router.get('/notifications', protect, getNotificationSettings);
 router.put('/notifications', protect, updateNotificationSettings);
+
+// Push notification device tokens
+router.post('/push-token', protect, registerPushToken);
+router.delete('/push-token', protect, removePushToken);
 
 // Linked devices and sessions
 router.get('/sessions', protect, getMySessions);
