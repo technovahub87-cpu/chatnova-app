@@ -29,6 +29,10 @@ class WebRTCCallService {
   private initialized = false;
   private selectedAudioOutput = '';
 
+  // Allow temporary network interruptions to recover.
+  private recoveryTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly recoveryDelay = 15000;
+
   onIncomingCall: ((data: any) => void) | null = null;
   onCallStatus: ((status: string, data?: any) => void) | null = null;
   onCallError: ((message: string) => void) | null = null;
@@ -88,6 +92,45 @@ class WebRTCCallService {
     wsService.on('call:ringing', (data) => {
       this.onCallStatus?.('ringing', data);
     });
+  }
+
+  private clearRecoveryTimer(): void {
+    if (this.recoveryTimer) {
+      clearTimeout(this.recoveryTimer);
+      this.recoveryTimer = null;
+    }
+  }
+
+  private handleConnectionState(peer: RTCPeerConnection): void {
+    if (!this.activeCall || this.activeCall.peer !== peer) return;
+
+    const state = peer.connectionState;
+
+    if (state === 'connected') {
+      this.clearRecoveryTimer();
+      this.onCallStatus?.('connected');
+      return;
+    }
+
+    if (state === 'disconnected' || state === 'failed') {
+      // Do not interrupt the call immediately.
+      this.onCallStatus?.('reconnecting');
+
+      this.clearRecoveryTimer();
+
+      this.recoveryTimer = setTimeout(() => {
+        if (!this.activeCall || this.activeCall.peer !== peer) return;
+
+        const currentState = peer.connectionState;
+
+        if (
+          currentState === 'disconnected' ||
+          currentState === 'failed'
+        ) {
+          this.onCallStatus?.('connection-lost');
+        }
+      }, this.recoveryDelay);
+    }
   }
 
   private createCallId(): string {
@@ -181,18 +224,7 @@ class WebRTCCallService {
     };
 
     peer.onconnectionstatechange = () => {
-      if (!this.activeCall || this.activeCall.peer !== peer) return;
-
-      if (peer.connectionState === 'connected') {
-        this.onCallStatus?.('connected');
-      }
-
-      if (
-        peer.connectionState === 'failed' ||
-        peer.connectionState === 'disconnected'
-      ) {
-        this.onCallStatus?.('connection-lost');
-      }
+      this.handleConnectionState(peer);
     };
 
     return peer;
@@ -555,9 +587,12 @@ class WebRTCCallService {
   }
 
   private cleanup(): void {
+    this.clearRecoveryTimer();
+
     if (this.activeCall?.peer) {
       this.activeCall.peer.ontrack = null;
       this.activeCall.peer.onicecandidate = null;
+      this.activeCall.peer.onconnectionstatechange = null;
       this.activeCall.peer.close();
     }
 
