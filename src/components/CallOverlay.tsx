@@ -10,8 +10,7 @@ import {
   AlertCircle,
   Camera,
   Volume2,
-  Headphones,
-  X
+  Headphones
 } from 'lucide-react';
 import {
   webrtcCallService,
@@ -58,81 +57,8 @@ export const CallOverlay: React.FC<CallOverlayProps> = ({
     }
   }, [callVolume, remoteStream]);
 
-  // Incoming call ringtone
-  useEffect(() => {
-    if (!incomingCall) return;
-
-    let audioContext: AudioContext | null = null;
-    let ringTimer: number | null = null;
-    let stopped = false;
-
-    const playRing = async () => {
-      try {
-        const AudioContextClass =
-          window.AudioContext ||
-          (window as any).webkitAudioContext;
-
-        if (!AudioContextClass || stopped) return;
-
-        if (!audioContext) {
-          audioContext = new AudioContextClass();
-        }
-
-        if (audioContext.state === 'suspended') {
-          await audioContext.resume();
-        }
-
-        if (stopped || audioContext.state !== 'running') return;
-
-        const now = audioContext.currentTime;
-
-        [0, 0.22].forEach((offset) => {
-          const oscillator = audioContext!.createOscillator();
-          const gain = audioContext!.createGain();
-
-          oscillator.type = 'sine';
-          oscillator.frequency.setValueAtTime(440, now + offset);
-
-          gain.gain.setValueAtTime(0, now + offset);
-          gain.gain.linearRampToValueAtTime(
-            0.16,
-            now + offset + 0.04
-          );
-          gain.gain.setValueAtTime(
-            0.16,
-            now + offset + 0.38
-          );
-          gain.gain.linearRampToValueAtTime(
-            0,
-            now + offset + 0.48
-          );
-
-          oscillator.connect(gain);
-          gain.connect(audioContext!.destination);
-
-          oscillator.start(now + offset);
-          oscillator.stop(now + offset + 0.5);
-        });
-      } catch (err) {
-        console.warn('[ChatNova Ringtone]:', err);
-      }
-    };
-
-    playRing();
-    ringTimer = window.setInterval(playRing, 1800);
-
-    return () => {
-      stopped = true;
-
-      if (ringTimer !== null) {
-        window.clearInterval(ringTimer);
-      }
-
-      if (audioContext && audioContext.state !== 'closed') {
-        audioContext.close().catch(() => {});
-      }
-    };
-  }, [incomingCall]);
+  // Incoming ringtone is handled by the native Android ringtone setting.
+  // Do not play a second Web Audio ringtone here.
 
   useEffect(() => {
     webrtcCallService.initialize();
