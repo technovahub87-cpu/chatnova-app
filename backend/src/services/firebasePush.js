@@ -108,6 +108,18 @@ const sendPushNotification = async ({
       }
     }
 
+    const isCallNotification =
+      safeData.notificationType === 'call';
+
+    const notification = {
+      title: String(title || 'ChatNova'),
+      body: String(body || 'You have a new notification.')
+    };
+
+    if (safeData.callId) {
+      notification.tag = safeData.callId;
+    }
+
     const response = await fetch(
       `https://fcm.googleapis.com/v1/projects/${account.project_id}/messages:send`,
       {
@@ -119,15 +131,15 @@ const sendPushNotification = async ({
         body: JSON.stringify({
           message: {
             token: deviceToken,
-            notification: {
-              title: String(title || 'ChatNova'),
-              body: String(body || 'You have a new notification.')
-            },
+            notification,
             data: safeData,
             android: {
               priority: 'high',
               notification: {
-                channel_id: 'chatnova_messages'
+                channel_id: isCallNotification
+                  ? 'chatnova_calls'
+                  : 'chatnova_messages',
+                tag: safeData.callId || undefined
               }
             }
           }
