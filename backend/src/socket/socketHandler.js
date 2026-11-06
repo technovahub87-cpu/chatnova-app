@@ -5,9 +5,11 @@ const User = require('../models/User');
 const Conversation = require('../models/Conversation');
 const Call = require('../models/Call');
 const { setUserOnline, setUserOffline } = require('../services/presenceService');
+const { isBlockedBetween } = require('../services/blockService');
+const { sendIncomingCallPush } = require('../services/callPush');
+
 const onlineUsers = new Map();
 const activeCalls = new Map();
-const { isBlockedBetween } = require('../services/blockService');
 
 const CALL_RING_TIMEOUT_MS = 45000;
 const MAX_SDP_LENGTH = 100000;
@@ -138,30 +140,30 @@ module.exports = (io) => {
         }
 
         const conversation = await Conversation.findOne({
-  _id: conversationId,
-  participants: user.id,
-  isActive: true
-}).select('_id type participants');
+          _id: conversationId,
+          participants: user.id,
+          isActive: true
+        }).select('_id type participants');
 
-if (!conversation) {
-  return socket.emit('socket:error', {
-    message: 'You are not a member of this conversation.'
-  });
-}
+        if (!conversation) {
+          return socket.emit('socket:error', {
+            message: 'You are not a member of this conversation.'
+          });
+        }
 
-if (conversation.type === 'direct') {
-  const peerId = conversation.participants
-    .map((id) => String(id))
-    .find((id) => id !== user.id);
+        if (conversation.type === 'direct') {
+          const peerId = conversation.participants
+            .map((id) => String(id))
+            .find((id) => id !== user.id);
 
-  if (peerId && await isBlockedBetween(user.id, peerId)) {
-    return socket.emit('socket:error', {
-      message: 'This chat is unavailable because one of these users has blocked the other.'
-    });
-  }
-}
+          if (peerId && await isBlockedBetween(user.id, peerId)) {
+            return socket.emit('socket:error', {
+              message: 'This chat is unavailable because one of these users has blocked the other.'
+            });
+          }
+        }
 
-socket.join(`conversation:${conversationId}`);
+        socket.join(`conversation:${conversationId}`);
 
         socket.emit('chat:joined', {
           success: true,
@@ -263,12 +265,13 @@ socket.join(`conversation:${conversationId}`);
             message: 'Call recipient could not be verified.'
           });
         }
+
         if (await isBlockedBetween(user.id, peerId)) {
-  return socket.emit('call:error', {
-    callId,
-    message: 'Calls are unavailable because one of these users has blocked the other.'
-  });
-}
+          return socket.emit('call:error', {
+            callId,
+            message: 'Calls are unavailable because one of these users has blocked the other.'
+          });
+        }
 
         const peerSockets = await io.in(`user:${peerId}`).fetchSockets();
 
@@ -338,6 +341,23 @@ socket.join(`conversation:${conversationId}`);
         }, CALL_RING_TIMEOUT_MS);
 
         activeCalls.set(callId, call);
+
+        // Send Firebase notification to the recipient's Android device.
+        // This allows the caller name and call type to appear when
+        // ChatNova is running in the background.
+        void sendIncomingCallPush({
+          userId: peerId,
+          callId,
+          conversationId,
+          callType,
+          caller: {
+            id: user.id,
+            customId: user.customId,
+            displayName: user.displayName
+          }
+        }).catch((error) => {
+          console.error('[Call Push Send Error]:', error.message);
+        });
 
         io.to(`user:${peerId}`).emit('call:incoming', {
           callId,
