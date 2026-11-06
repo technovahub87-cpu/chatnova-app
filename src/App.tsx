@@ -1,3 +1,4 @@
+
 import React, { useEffect, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { PushNotifications } from '@capacitor/push-notifications';
@@ -24,7 +25,6 @@ function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showMasterAdmin, setShowMasterAdmin] = useState(false);
 
-  // Restore existing login session
   useEffect(() => {
     let cancelled = false;
 
@@ -97,7 +97,6 @@ function AppContent() {
     };
   }, []);
 
-  // Connect WebSocket after login
   useEffect(() => {
     if (!currentUser) {
       wsService.disconnect();
@@ -118,7 +117,7 @@ function AppContent() {
     };
   }, [currentUser?.id]);
 
-  // Register Android device for Firebase push notifications
+  // Register Android Firebase push notifications.
   useEffect(() => {
     if (!currentUser || Capacitor.getPlatform() !== 'android') {
       return;
@@ -129,7 +128,7 @@ function AppContent() {
 
     const setupPushNotifications = async () => {
       try {
-        // Create the channel used by the backend FCM sender
+        // Normal message notifications.
         await PushNotifications.createChannel({
           id: 'chatnova_messages',
           name: 'ChatNova Messages',
@@ -139,7 +138,17 @@ function AppContent() {
           vibration: true
         });
 
-        // Receive the FCM device token
+        // Incoming voice and video call notifications.
+        await PushNotifications.createChannel({
+          id: 'chatnova_calls',
+          name: 'ChatNova Calls',
+          description: 'Incoming ChatNova voice and video calls',
+          importance: 5,
+          visibility: 1,
+          vibration: true,
+          sound: 'default'
+        });
+
         const registrationListener =
           await PushNotifications.addListener(
             'registration',
@@ -209,7 +218,9 @@ function AppContent() {
             (notification) => {
               console.log(
                 '[ChatNova] Push notification received:',
-                notification.title
+                notification.title,
+                notification.body,
+                notification.data
               );
             }
           );
@@ -231,7 +242,6 @@ function AppContent() {
 
         if (cancelled) return;
 
-        // Check and request Android notification permission
         let permission =
           await PushNotifications.checkPermissions();
 
@@ -246,7 +256,6 @@ function AppContent() {
           return;
         }
 
-        // Register this Android device with Firebase
         await PushNotifications.register();
 
         console.log(
